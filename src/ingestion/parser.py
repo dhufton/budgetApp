@@ -15,24 +15,53 @@ class ChaseStatementParser:
         all_data = []
         for path in file_paths:
             try:
+                print(f"DEBUG: Parsing {path}...")  # Add this debug print
                 df = self.parse(path)
-                all_data.append(df)
-            except Exception as e:
-                print(f"Failed to parse {path}: {e}")
 
+                if not df.empty:
+                    all_data.append(df)
+                    print(f"DEBUG: Success - Found {len(df)} rows.")
+                else:
+                    print(f"DEBUG: Warning - No transactions found in {path}")
+
+            except Exception as e:
+                print(f"ERROR Parsing {path}: {e}")
+                # We continue to the next file instead of crashing
+
+        # FIX: Check if we have data before concatenating
         if not all:
+            print("DEBUG: No valid data found in ANY file.")
             return pd.DataFrame()
 
         combined_df = pd.concat(all_data, ignore_index=True)
-        # Drop duplicates in case the same file was uploaded twice
         return combined_df.drop_duplicates()
 
     def parse(self, file_path):
         raw_transactions = []
+        closing_balance = None  # New variable to track balance
+
         with pdfplumber.open(file_path) as pdf:
             for page in pdf.pages:
+                # 1. Extract transactions (existing logic)
                 raw_transactions.extend(self._extract_page(page))
-        return self._clean_and_categorize(raw_transactions)
+
+                # 2. Extract Closing Balance (New Logic)
+                # Look for the footer string on the last page usually
+                text = page.extract_text()
+                # Regex for "Closing balance £954.74"
+                balance_match = re.search(r"Closing balance\s+£([\d,]+\.\d{2})", text)
+                if balance_match:
+                    val = balance_match.group(1).replace(',', '')
+                    closing_balance = float(val)
+
+        df = self._clean_and_categorize(raw_transactions)
+
+        # Add the closing balance to the DataFrame (we'll just use the max date to tag it)
+        if not df.empty and closing_balance:
+            # We attach it as metadata to the dataframe
+            df.attrs['closing_balance'] = closing_balance
+
+        return df
 
     def _extract_page(self, page):
         text = page.extract_text()
@@ -44,18 +73,47 @@ class ChaseStatementParser:
 
         for line in lines:
             date_match = self.date_pattern.match(line)
+
+            # CASE 1: New Transaction Line
             if date_match:
                 if current_trans: transactions.append(current_trans)
+
                 current_trans = {
                     "Date": date_match.group(1),
                     "Description": line[len(date_match.group(1)):].strip(),
-                    "Amount": None
+                    "Amount": None,
+                    "Balance": None  # Initialize Balance
                 }
-                self._find_amount(current_trans, line)
+
+                # Check for money on this line
+                matches = self.money_pattern.findall(line)
+                if len(matches) >= 2:
+                    current_trans["Amount"] = matches[-2]
+                    current_trans["Balance"] = matches[-1]
+                    # Clean description
+                    desc = current_trans["Description"]
+                    desc = desc.replace(matches[-2], "").replace(matches[-1], "")
+                    current_trans["Description"] = desc.strip()
+                elif len(matches) == 1:
+                    # Ambiguous (rare): assume it's amount if uncategorized?
+                    # Safer to leave for next lines usually
+                    pass
+
+            # CASE 2: Continuation Line
             elif current_trans:
                 if self._is_junk(line): continue
-                if not current_trans['Amount']:
-                    self._find_amount(current_trans, line)
+
+                matches = self.money_pattern.findall(line)
+                if matches:
+                    if len(matches) >= 2:
+                        current_trans["Amount"] = matches[-2]
+                        current_trans["Balance"] = matches[-1]
+                    elif len(matches) == 1:
+                        # If we already have Amount, this might be Balance
+                        if current_trans["Amount"] is None:
+                            current_trans["Amount"] = matches[0]
+                        elif current_trans["Balance"] is None:
+                            current_trans["Balance"] = matches[0]
                 else:
                     current_trans["Description"] += " " + line.strip()
 
@@ -79,7 +137,20 @@ class ChaseStatementParser:
         df = pd.DataFrame(data)
         if df.empty: return df
 
-        # Clean Amount
+        # 1. Clean Amount
+        df['Amount'] = df['Amount'].astype(str).str.replace('£', '').str.replace(',', '')
+        df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
+
+        # 2. Clean Balance (FIX HERE)
+        # We need to clean the Balance column just like Amount
+        if 'Balance' in df.columns:
+            df['Balance'] = df['Balance'].astype(str).str.replace('£', '').str.replace(',', '')
+            df['Balance'] = pd.to_numeric(df['Balance'], errors='coerce')
+        else:
+            # Create dummy column if missing to prevent crashes
+            df['Balance'] = 0.0
+
+        # 1. Clean Amount
         df['Amount'] = df['Amount'].astype(str).str.replace('£', '').str.replace(',', '')
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
 

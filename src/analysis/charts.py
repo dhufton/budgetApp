@@ -4,22 +4,40 @@ import plotly.graph_objects as go
 import pandas as pd
 from config import BUDGET_LIMITS
 
+def calculate_plot_data(df):
+    """
+    Prepares data for charts.
+    - Filters out 'Ignore'.
+    - Maps 'Uncategorized' to 'Shopping' for visual cleanliness.
+    - Inverts amounts (Cost = Positive).
+    """
+    df = df.copy()
+
+    # 1. FILTER: Exclude 'Ignore'
+    df = df[df['Category'] != 'Ignore']
+
+    # 2. LOGIC: Treat Uncategorized as Shopping for charts
+    # We create a new column so we don't overwrite the actual 'Category'
+    # (which needs to stay 'Uncategorized' for the review queue)
+    df['PlotCategory'] = df['Category'].replace({'Uncategorized': 'Shopping'})
+
+    # 3. Invert amounts
+    df['PlotAmount'] = df['Amount'] * -1
+
+    return df
 
 def create_spending_pie_chart(df):
-    """
-    Generates a pie chart of total spending by category.
-    """
-    # Filter for expenses only (negative amounts)
-    expenses = df[df['Amount'] < 0].copy()
-    expenses['AbsAmount'] = expenses['Amount'].abs()
+    data = calculate_plot_data(df)
 
-    grouped = expenses.groupby('Category')['AbsAmount'].sum().reset_index()
+    # Group by PlotCategory instead of Category
+    grouped = data.groupby('PlotCategory')['PlotAmount'].sum().reset_index()
+    grouped = grouped[grouped['PlotAmount'] > 0]
 
     fig = px.pie(
         grouped,
-        values='AbsAmount',
-        names='Category',
-        title='Total Spending Distribution',
+        values='PlotAmount',
+        names='PlotCategory',  # <--- Use the Mapped Category
+        title='Total Outgoings (Uncategorized included in Shopping)',
         hole=0.4,
         color_discrete_sequence=px.colors.qualitative.Prism
     )
@@ -28,25 +46,20 @@ def create_spending_pie_chart(df):
 
 
 def create_monthly_trend_line(df):
-    """
-    Generates a line graph of monthly spending vs budget targets.
-    """
-    # Prepare Data: Group by Month and Category
-    expenses = df[df['Amount'] < 0].copy()
-    expenses['AbsAmount'] = expenses['Amount'].abs()
-    expenses['Month'] = expenses['Date'].dt.to_period('M').astype(str)
+    data = calculate_plot_data(df)
+    data['Month'] = data['Date'].dt.to_period('M').astype(str)
 
-    # 1. Actual Spending Line
-    monthly_cat = expenses.groupby(['Month', 'Category'])['AbsAmount'].sum().reset_index()
+    # Group by PlotCategory
+    monthly_cat = data.groupby(['Month', 'PlotCategory'])['PlotAmount'].sum().reset_index()
 
     fig = px.line(
         monthly_cat,
         x='Month',
-        y='AbsAmount',
-        color='Category',
+        y='PlotAmount',
+        color='PlotCategory',  # <--- Use the Mapped Category
         markers=True,
-        title='Monthly Spending Evolution (Past 6 Months)',
-        labels={'AbsAmount': 'Amount (£)', 'Month': 'Month'}
+        title='Monthly Evolution',
+        labels={'PlotAmount': 'Net Amount (£)', 'Month': 'Month', 'PlotCategory': 'Category'}
     )
 
     # 2. Add Budget Target Lines (Dashed)
@@ -55,8 +68,8 @@ def create_monthly_trend_line(df):
     if not months: return fig
 
     for category, limit in BUDGET_LIMITS.items():
-        # Only plot budget line if that category exists in the data to avoid clutter
-        if category in monthly_cat['Category'].values:
+        # FIX IS HERE: Check 'PlotCategory' instead of 'Category'
+        if category in monthly_cat['PlotCategory'].values:
             fig.add_trace(go.Scatter(
                 x=months,
                 y=[limit] * len(months),
@@ -66,4 +79,29 @@ def create_monthly_trend_line(df):
                 opacity=0.5
             ))
 
+    return fig
+
+
+def create_balance_trend_line(df):
+    """
+    Plots the final 'Balance' value of the last transaction of each month.
+    """
+    # 1. Sort by Date
+    df_sorted = df.sort_values(by=['Date']).copy()
+
+    # 2. Create 'Month' column
+    df_sorted['Month'] = df_sorted['Date'].dt.to_period('M').astype(str)
+
+    # 3. Get the LAST row for every month (which holds that month's closing balance)
+    # We group by Month and take the .tail(1)
+    monthly_closing = df_sorted.groupby('Month').tail(1)
+
+    fig = px.line(
+        monthly_closing,
+        x='Month',
+        y='Balance',
+        markers=True,
+        title='Monthly Closing Balance',
+        labels={'Balance': 'Account Balance (£)'}
+    )
     return fig

@@ -120,26 +120,29 @@ class ChaseStatementParser:
         return any(marker in line for marker in junk_markers)
 
     def _clean_and_categorize(self, data):
-        """
-        Post-processing: Type conversion and Category assignment.
-        """
         df = pd.DataFrame(data)
+        if df.empty: return df
 
-        if df.empty:
-            return df
-
-        # 1. Clean Numeric Data
-        # Remove '£' and ',' then convert to float
+        # Clean Amount
         df['Amount'] = df['Amount'].astype(str).str.replace('£', '').str.replace(',', '')
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
 
-        # 2. Clean Date Data
+        # Parse Dates
         df['Date'] = pd.to_datetime(df['Date'], format='%d %b %Y', errors='coerce')
 
-        # 3. Apply Categorization from Config
+        # Categorize
         df['Category'] = df['Description'].apply(self._get_category)
 
-        return df
+        # LOGIC CHANGE:
+        # 1. Keep all "Savings" transactions (both positive and negative)
+        # 2. Keep all other negative transactions (Expenses)
+        # 3. Drop other income (Salary, refunds, etc) as we only track spending/savings
+
+        is_savings = df['Category'] == 'Savings'
+        is_expense = df['Amount'] < 0
+
+        # Return rows that are EITHER savings OR expenses
+        return df[is_savings | is_expense].copy()
 
     def _get_category(self, description):
         """
