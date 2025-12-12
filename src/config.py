@@ -28,5 +28,6 @@ CATEGORY_RULES = {
     "Utilities": ["British Gas", "Thames Water", "Council Tax", "Hyperoptic", "O2", "Sky"],
     "Savings": ["Chase Saver", "Round Up"],
     "Credit Cards": ["American Express", "To John Lewis", "NewDay"],
+    "Travel": ["EUR", "USD", "World Duty Free"],
     "Ignore": ["3305 JPMCB", "Hannah Bince", "Adelle Gamble", "Credit Payments", "Internal Transfer", "Refund", "Payment"]
 }

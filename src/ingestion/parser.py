@@ -132,7 +132,17 @@ class ChaseStatementParser:
             trans["Description"] = trans["Description"].replace(val, "").strip()
 
     def _is_junk(self, line):
-        return any(x in line for x in ["Account number:", "Page ", "Opening balance", "Closing balance"])
+        # Added explicit checks for Opening/Closing balance lines
+        junk_markers = [
+            "Account number:",
+            "Page ",
+            "Opening balance",
+            "Closing balance",
+            "Dylan's Account statement",
+            "Money in",
+            "Money out"
+        ]
+        return any(marker in line for marker in junk_markers)
 
     def _clean_and_categorize(self, data):
         df = pd.DataFrame(data)
@@ -154,6 +164,8 @@ class ChaseStatementParser:
         # 1. Clean Amount
         df['Amount'] = df['Amount'].astype(str).str.replace('£', '').str.replace(',', '')
         df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0.0)
+
+        df = df[df['Amount'] != 0.0]
 
         # Parse Dates
         df['Date'] = pd.to_datetime(df['Date'], format='%d %b %Y', errors='coerce')
