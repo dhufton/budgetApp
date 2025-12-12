@@ -3,6 +3,7 @@ import pdfplumber
 import re
 import pandas as pd
 from config import CATEGORY_RULES
+from ingestion.learning import load_learned_rules
 
 
 class ChaseStatementParser:
@@ -165,8 +166,20 @@ class ChaseStatementParser:
         return df
 
     def _get_category(self, desc):
-        desc = str(desc).upper()
+        desc = str(desc).strip()
+
+        # 1. CHECK LEARNING FILE (Exact Match)
+        # This is for specific vendor names you've manually corrected
+        learned_rules = load_learned_rules()
+        if desc in learned_rules:
+            return learned_rules[desc]
+
+        # 2. FALLBACK TO CONFIG RULES (Keyword Search)
+        # This is for your broad rules like "Tesco" matching "Tesco Extra"
+        desc_upper = desc.upper()
         for cat, keywords in CATEGORY_RULES.items():
             for k in keywords:
-                if k.upper() in desc: return cat
+                if k.upper() in desc_upper:
+                    return cat
+
         return "Uncategorized"

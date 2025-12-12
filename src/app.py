@@ -1,9 +1,11 @@
-# budgetApp/src/app.py
 import streamlit as st
 import pandas as pd
+
+from ingestion.learning import save_learned_rule
 from ingestion.storage import save_uploaded_file, get_all_statement_paths
 from ingestion.parser import ChaseStatementParser
 from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
+from config import CATEGORY_RULES  # Import here for the dropdown options
 
 # Page Config
 st.set_page_config(page_title="Budget Tracker", layout="wide")
@@ -27,7 +29,7 @@ with st.sidebar:
 # Main Application Logic
 parser = ChaseStatementParser()
 
-# 1. Load ALL stored data (historical + new)
+# 1. Load ALL stored data
 all_files = get_all_statement_paths()
 
 if not all_files:
@@ -40,7 +42,7 @@ else:
         st.warning("Statements found but no transactions could be parsed.")
     else:
         # Sort by date
-        df = df.sort_values(by="Date", ascending=False)  # Newest first is better for review
+        df = df.sort_values(by="Date", ascending=False)
 
         # --- FEATURE: UNCATEGORIZED REVIEW QUEUE ---
         uncategorized = df[df['Category'] == 'Uncategorized'].copy()
@@ -49,9 +51,6 @@ else:
             st.warning(f"⚠️ You have {len(uncategorized)} uncategorized transactions. Please review them below.")
 
             with st.expander("📝 Review Uncategorized Items", expanded=True):
-                # Get list of valid categories from your config
-                from config import CATEGORY_RULES
-
                 # Add 'Uncategorized' and 'Ignore' to options
                 options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
 
@@ -72,28 +71,50 @@ else:
                 )
 
                 # Button to Apply Changes
-                if st.button("Update Categories"):
-                    # 1. Update the main dataframe 'df' with new values from 'edited_df'
-                    # We match on Date, Description, and Amount to find the original row
-                    # (Note: In a real DB app, we'd use a unique ID. For this CSV approach, this is a safe proxy)
-
+                if st.button("Update Categories", key="btn_update_review"):
+                    # Process all edits
                     for index, row in edited_df.iterrows():
+                        new_category = row['Category']
+
+                        # 1. Save rule if it's a real category
+                        if new_category not in ['Uncategorized', 'Ignore']:
+                            save_learned_rule(row['Description'], new_category)
+
+                        # 2. Update the main DataFrame (df) in memory
+                        # This ensures visual feedback even before the re-parse happens
                         mask = (
                                 (df['Date'] == row['Date']) &
                                 (df['Description'] == row['Description']) &
                                 (df['Amount'] == row['Amount'])
                         )
-                        # Apply new category
-                        df.loc[mask, 'Category'] = row['Category']
+                        df.loc[mask, 'Category'] = new_category
 
-                    # 2. Filter out "Ignore" or still "Uncategorized" if you want to clean up charts
-                    # For now, we just rerun the app to refresh the charts with new data
+                    st.success("Categories updated and rules saved!")
+                    # Clear cache to ensure next parse picks up new rules
+                    st.cache_data.clear()
                     st.rerun()
 
-        # --- Top Level Metrics (Rest of your code) ---
+        # --- Top Level Metrics ---
         st.divider()
         st.markdown("### Snapshot")
-        # ... (Rest of your existing app.py code below) ...
+        col1, col2, col3 = st.columns(3)
+
+        # Calculate stats for the *latest* month
+        latest_month = df['Date'].dt.to_period('M').max()
+        current_month_data = df[df['Date'].dt.to_period('M') == latest_month].copy()
+
+        # Calculate Real "Spending" (Excluding Savings)
+        non_savings_spend = current_month_data[
+                                (current_month_data['Category'] != 'Savings') &
+                                (current_month_data['Amount'] < 0)
+                                ]['Amount'].sum() * -1
+
+        # Calculate Net Savings
+        net_savings = (current_month_data[current_month_data['Category'] == 'Savings']['Amount'] * -1).sum()
+
+        col1.metric("Latest Month", str(latest_month))
+        col2.metric("Total Spent", f"£{non_savings_spend:,.2f}")
+        col3.metric("Net Saved", f"£{net_savings:,.2f}")
 
         # --- Visualizations ---
         st.markdown("### Financial Trends")
@@ -102,7 +123,7 @@ else:
         st.plotly_chart(
             create_balance_trend_line(df),
             use_container_width=True,
-            key="balance_chart"  # <--- Added unique key
+            key="balance_chart"
         )
 
         # Row 2: Spending Graphs
@@ -112,14 +133,14 @@ else:
             st.plotly_chart(
                 create_spending_pie_chart(df),
                 use_container_width=True,
-                key="spending_pie"  # <--- Added unique key
+                key="spending_pie"
             )
 
         with col_chart2:
             st.plotly_chart(
                 create_monthly_trend_line(df),
                 use_container_width=True,
-                key="spending_trend"  # <--- Added unique key
+                key="spending_trend"
             )
 
         # --- Data Table ---

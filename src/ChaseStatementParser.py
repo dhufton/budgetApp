@@ -3,6 +3,7 @@ import re
 import pandas as pd
 from pathlib import Path
 from config import CATEGORY_RULES
+from ingestion.learning import load_learned_rules
 
 
 class ChaseStatementParser:
@@ -144,16 +145,19 @@ class ChaseStatementParser:
         # Return rows that are EITHER savings OR expenses
         return df[is_savings | is_expense].copy()
 
-    def _get_category(self, description):
-        """
-        Matches description against rules in src/config.src
-        """
-        description_upper = str(description).upper()
+    def _get_category(self, desc):
+        desc = str(desc).strip()
 
-        for category, keywords in CATEGORY_RULES.items():
-            for keyword in keywords:
-                if keyword.upper() in description_upper:
-                    return category
+        # 1. CHECK LEARNING FILE FIRST (Exact Match)
+        learned_rules = load_learned_rules()
+        if desc in learned_rules:
+            return learned_rules[desc]
+
+        # 2. FALLBACK TO CONFIG RULES (Keyword Search)
+        desc_upper = desc.upper()
+        for cat, keywords in CATEGORY_RULES.items():
+            for k in keywords:
+                if k.upper() in desc_upper: return cat
 
         return "Uncategorized"
 
