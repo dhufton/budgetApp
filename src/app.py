@@ -2,51 +2,86 @@
 import streamlit as st
 import pandas as pd
 import extra_streamlit_components as stx
-import uuid
-from datetime import datetime, timedelta
+import time
 
-# Import ingestion logic (Ensure these functions accept user_id)
 from ingestion.learning import save_learned_rule
-from ingestion.storage import save_uploaded_file, get_all_statement_paths
+from ingestion.storage import save_uploaded_file, get_all_statement_paths, get_user_dir
 from ingestion.parser import ChaseStatementParser, AmexCSVParser
 from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
 from config import CATEGORY_RULES
 
 # Page Config
 st.set_page_config(page_title="Budget Tracker", layout="wide")
-st.title("📊 Personal Finance Dashboard")
+
 
 # -----------------------------------------------------------------------------
-# USER SESSION MANAGEMENT (Cookies)
+# SESSION & AUTHENTICATION
 # -----------------------------------------------------------------------------
 def get_manager():
     return stx.CookieManager()
 
+
 cookie_manager = get_manager()
 
-# Try to get user_id from cookie
-user_id = cookie_manager.get(cookie="budget_user_id")
+# 1. Try to get logged-in user from cookie
+if 'user_id' not in st.session_state:
+    st.session_state['user_id'] = cookie_manager.get(cookie="budget_user_id")
 
-if not user_id:
-    # If no user found, create a new one
-    new_id = str(uuid.uuid4())
-    # Set cookie to expire in 1 year
-    cookie_manager.set("budget_user_id", new_id, expires_at=datetime.now() + timedelta(days=365))
-    st.info("Creating a new secure session for you... Page will reload.")
-    st.stop() # Stop execution to let the cookie write and page reload
+# 2. Authentication Flow
+if not st.session_state['user_id']:
+    st.title("🔐 Login")
 
-# Display Session Info (Optional, good for debugging)
+    tab1, tab2 = st.tabs(["Login", "Register"])
+
+    with tab1:
+        username_input = st.text_input("Username", key="login_user")
+        if st.button("Login"):
+            # Check if user directory exists
+            user_dir = get_user_dir(username_input)
+            if user_dir.exists():
+                # Set cookie (expires in 30 days)
+                cookie_manager.set("budget_user_id", username_input, key="set_login")
+                st.session_state['user_id'] = username_input
+                st.success(f"Welcome back, {username_input}!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("User not found. Please register first.")
+
+    with tab2:
+        new_user = st.text_input("Choose Username", key="reg_user")
+        if st.button("Create Account"):
+            if new_user:
+                # Create directory
+                get_user_dir(new_user)
+                # Login automatically
+                cookie_manager.set("budget_user_id", new_user, key="set_reg")
+                st.session_state['user_id'] = new_user
+                st.success(f"Account created for {new_user}!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("Please enter a username.")
+
+    st.stop()  # Stop here until logged in
+
+# -----------------------------------------------------------------------------
+# MAIN APP (Only runs if logged in)
+# -----------------------------------------------------------------------------
+user_id = st.session_state['user_id']
+
+# Sidebar User Info
 with st.sidebar:
-    st.caption(f"User Session: {user_id[:8]}...")
-    if st.button("Reset Session"):
+    st.write(f"👤 **{user_id}**")
+    if st.button("Logout"):
         cookie_manager.delete("budget_user_id")
+        st.session_state['user_id'] = None
         st.rerun()
+    st.divider()
 
-# -----------------------------------------------------------------------------
-# APP LOGIC
-# -----------------------------------------------------------------------------
+st.title("📊 Personal Finance Dashboard")
 
-# Sidebar for Actions
+# Upload Logic
 with st.sidebar:
     st.header("Upload Statements")
     uploaded_files = st.file_uploader(
@@ -58,23 +93,22 @@ with st.sidebar:
     if uploaded_files:
         with st.spinner("Processing files..."):
             for f in uploaded_files:
-                # PASS USER_ID to save files in the user's specific folder
                 save_uploaded_file(f, user_id=user_id)
             st.success(f"Saved {len(uploaded_files)} new statements!")
             st.cache_data.clear()
 
-# 1. Load ALL stored data for THIS USER
+# Load Data
 all_files = get_all_statement_paths(user_id=user_id)
-# Filter for supported extensions
 all_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.csv']]
 
 if not all_files:
-    st.info("No statements found. Please upload your Chase PDF or Amex CSV statements to begin.")
+    st.info(f"Welcome, {user_id}! You have no statements yet. Upload them in the sidebar.")
 else:
-    # We need a unified parse logic that handles mixed types
-    all_dfs = []
+    # ... (Rest of your exact app logic goes here) ...
+    # ... (Copy-paste the parsing logic from the previous step) ...
 
-    # Initialize parsers (Pass user_id if they need to load user-specific rules)
+    # Initialize parsers
+    all_dfs = []
     chase_parser = ChaseStatementParser(user_id=user_id)
     amex_parser = AmexCSVParser(user_id=user_id)
 
@@ -82,10 +116,8 @@ else:
         for f in all_files:
             try:
                 if f.suffix.lower() == '.pdf':
-                    # Chase / Amex PDF
                     df_file = chase_parser.parse(f)
                 elif f.suffix.lower() == '.csv':
-                    # Amex CSV
                     df_file = amex_parser.parse(f)
                 else:
                     continue
@@ -95,106 +127,56 @@ else:
             except Exception as e:
                 st.error(f"Error parsing {f.name}: {e}")
 
-    # Combine all data
     if not all_dfs:
-        st.warning("Statements were found, but no transactions could be parsed.")
+        st.warning("Statements found but no transactions parsed.")
         df = pd.DataFrame()
     else:
         df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
 
-    # Only proceed if we have a valid DataFrame
     if not df.empty:
-        # Sort by date
         df = df.sort_values(by="Date", ascending=False)
 
-        # --- FEATURE: UNCATEGORIZED REVIEW QUEUE ---
+        # --- UNCATEGORIZED QUEUE ---
         uncategorized = df[df['Category'] == 'Uncategorized'].copy()
 
         if not uncategorized.empty:
-            st.warning(f"⚠️ You have {len(uncategorized)} uncategorized transactions. Please review them below.")
-
-            with st.expander("📝 Review Uncategorized Items", expanded=True):
+            st.warning(f"⚠️ {len(uncategorized)} uncategorized items.")
+            with st.expander("📝 Review Queue", expanded=True):
                 options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
-
                 edited_df = st.data_editor(
                     uncategorized[['Date', 'Description', 'Amount', 'Category']],
-                    column_config={
-                        "Category": st.column_config.SelectboxColumn(
-                            "Assign Category",
-                            help="Select the correct category for this transaction",
-                            options=options,
-                            required=True,
-                        )
-                    },
-                    hide_index=True,
-                    use_container_width=True,
-                    key="editor_uncat"
+                    column_config={"Category": st.column_config.SelectboxColumn("Assign", options=options)},
+                    hide_index=True, use_container_width=True, key="editor_uncat"
                 )
-
-                if st.button("Update Categories", key="btn_update_review"):
+                if st.button("Update Categories", key="btn_update"):
                     for index, row in edited_df.iterrows():
-                        new_category = row['Category']
-
-                        if new_category not in ['Uncategorized', 'Ignore']:
-                            # PASS USER_ID to save rules to the user's JSON file
-                            save_learned_rule(row['Description'], new_category, user_id=user_id)
-
-                        # Update in-memory DF for immediate feedback
-                        mask = (
-                                (df['Date'] == row['Date']) &
-                                (df['Description'] == row['Description']) &
-                                (df['Amount'] == row['Amount'])
-                        )
-                        df.loc[mask, 'Category'] = new_category
-
-                    st.success("Categories updated and rules saved!")
+                        if row['Category'] not in ['Uncategorized', 'Ignore']:
+                            save_learned_rule(row['Description'], row['Category'], user_id=user_id)
+                    st.success("Saved!")
                     st.cache_data.clear()
                     st.rerun()
 
-        # --- Top Level Metrics ---
+        # --- DASHBOARD ---
         st.divider()
         st.markdown("### Snapshot")
         col1, col2, col3 = st.columns(3)
 
         latest_month = df['Date'].dt.to_period('M').max()
-        current_month_data = df[df['Date'].dt.to_period('M') == latest_month].copy()
+        month_df = df[df['Date'].dt.to_period('M') == latest_month]
 
-        non_savings_spend = current_month_data[
-                                (current_month_data['Category'] != 'Savings') &
-                                (current_month_data['Amount'] < 0)
-                                ]['Amount'].sum() * -1
+        # Metrics
+        spend = month_df[(month_df['Category'] != 'Savings') & (month_df['Amount'] < 0)]['Amount'].sum() * -1
+        save = (month_df[month_df['Category'] == 'Savings']['Amount'] * -1).sum()
 
-        net_savings = (current_month_data[current_month_data['Category'] == 'Savings']['Amount'] * -1).sum()
+        col1.metric("Month", str(latest_month))
+        col2.metric("Spent", f"£{spend:,.2f}")
+        col3.metric("Saved", f"£{save:,.2f}")
 
-        col1.metric("Latest Month", str(latest_month))
-        col2.metric("Total Spent", f"£{non_savings_spend:,.2f}")
-        col3.metric("Net Saved", f"£{net_savings:,.2f}")
+        # Charts
+        st.plotly_chart(create_balance_trend_line(df), use_container_width=True, key="bal")
+        c1, c2 = st.columns([1, 2])
+        c1.plotly_chart(create_spending_pie_chart(df), use_container_width=True, key="pie")
+        c2.plotly_chart(create_monthly_trend_line(df), use_container_width=True, key="line")
 
-        # --- Visualizations ---
-        st.markdown("### Financial Trends")
-
-        st.plotly_chart(
-            create_balance_trend_line(df),
-            use_container_width=True,
-            key="balance_chart"
-        )
-
-        col_chart1, col_chart2 = st.columns([1, 2])
-
-        with col_chart1:
-            st.plotly_chart(
-                create_spending_pie_chart(df),
-                use_container_width=True,
-                key="spending_pie"
-            )
-
-        with col_chart2:
-            st.plotly_chart(
-                create_monthly_trend_line(df),
-                use_container_width=True,
-                key="spending_trend"
-            )
-
-        # --- Data Table ---
-        with st.expander("View Raw Transaction Data"):
-            st.dataframe(df.style.format({"Amount": "£{:.2f}"}))
+        with st.expander("Raw Data"):
+            st.dataframe(df)
