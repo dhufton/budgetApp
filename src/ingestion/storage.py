@@ -1,8 +1,6 @@
 # budgetApp/src/ingestion/storage.py
 import os
 from pathlib import Path
-import json
-import bcrypt
 
 # Base path: budgetApp/data/
 BASE_DATA_DIR = Path(__file__).parent.parent.parent / "data"
@@ -73,36 +71,3 @@ def get_all_statement_paths(user_id):
     csvs = list(target_dir.glob("*.csv"))
 
     return pdfs + csvs
-
-
-def save_user_credentials(user_id, password):
-    """Hashes and saves password to data/users/{user_id}/credentials.json"""
-    user_dir = get_user_dir(user_id)
-
-    # Hash the password (bcrypt handles salt automatically)
-    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-    creds = {
-        "username": user_id,
-        "hash": hashed.decode('utf-8')
-    }
-
-    with open(user_dir / "credentials.json", "w") as f:
-        json.dump(creds, f)
-
-
-def verify_user_credentials(user_id, password):
-    """Returns True if password matches stored hash."""
-    creds_file = get_user_dir(user_id) / "credentials.json"
-
-    if not creds_file.exists():
-        return False
-
-    try:
-        with open(creds_file, "r") as f:
-            data = json.load(f)
-            stored_hash = data["hash"].encode('utf-8')
-
-        return bcrypt.checkpw(password.encode('utf-8'), stored_hash)
-    except Exception:
-        return False
