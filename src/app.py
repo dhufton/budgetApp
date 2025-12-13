@@ -52,10 +52,12 @@ if not st.session_state['user_id']:
         new_user = st.text_input("Choose Username", key="reg_user")
         if st.button("Create Account"):
             if new_user:
-                # Create directory
+                # 1. Create directory
                 get_user_dir(new_user)
-                # Login automatically
-                cookie_manager.set("budget_user_id", new_user, key="set_reg")
+
+                # 2. SAVE THE NAME (not a UUID) TO COOKIE
+                cookie_manager.set("budget_user_id", new_user, key="set_reg")  # <--- Checks this
+
                 st.session_state['user_id'] = new_user
                 st.success(f"Account created for {new_user}!")
                 time.sleep(1)
