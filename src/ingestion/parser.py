@@ -2,6 +2,7 @@
 import pdfplumber
 import re
 import pandas as pd
+import csv
 from config import CATEGORY_RULES
 from ingestion.learning import load_learned_rules
 
@@ -195,16 +196,6 @@ class ChaseStatementParser:
                     return cat
 
         return "Uncategorized"
-
-
-# src/ingestion/parser.py
-
-# ... existing imports ...
-# Ensure csv is imported
-import csv
-
-
-# ... keep ChaseStatementParser as is ...
 
 class AmexCSVParser:
     """
