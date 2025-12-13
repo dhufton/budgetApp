@@ -2,18 +2,51 @@
 import os
 from pathlib import Path
 
-DATA_DIR = Path(__file__).parent.parent / "data" / "statements"
+# Base path: budgetApp/data/
+BASE_DATA_DIR = Path(__file__).parent.parent.parent / "data"
 
 
-def save_uploaded_file(uploaded_file):
+def get_user_dir(user_id):
     """
-    Saves a Streamlit uploaded file to the local data directory.
+    Returns Path('data/users/{user_id}')
+    Creates the directory if it doesn't exist.
+    """
+    path = BASE_DATA_DIR / "users" / user_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def get_user_statements_path(user_id):
+    """
+    Returns Path('data/users/{user_id}/statements')
+    Creates the directory if it doesn't exist.
+    """
+    path = get_user_dir(user_id) / "statements"
+    path.mkdir(exist_ok=True)
+    return path
+
+
+def get_user_learning_file(user_id):
+    """
+    Returns Path('data/users/{user_id}/learned_categories.json')
+    Does NOT create the file, just returns the path.
+    """
+    return get_user_dir(user_id) / "learned_categories.json"
+
+
+def save_uploaded_file(uploaded_file, user_id):
+    """
+    Saves a Streamlit uploaded file to the user's specific statements directory.
     Returns the path to the saved file.
-    """
-    # Create directory if it doesn't exist
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-    file_path = DATA_DIR / uploaded_file.name
+    Args:
+        uploaded_file: The file object from st.file_uploader
+        user_id (str): The unique ID of the user (from cookie)
+    """
+    # Get the user's statement folder
+    target_dir = get_user_statements_path(user_id)
+
+    file_path = target_dir / uploaded_file.name
 
     with open(file_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
@@ -21,12 +54,20 @@ def save_uploaded_file(uploaded_file):
     return file_path
 
 
-def get_all_statement_paths():
-    """Returns a list of paths to all stored statements (PDF and CSV)."""
-    if not DATA_DIR.exists():
+def get_all_statement_paths(user_id):
+    """
+    Returns a list of paths to all stored statements (PDF and CSV) for a specific user.
+
+    Args:
+        user_id (str): The unique ID of the user
+    """
+    target_dir = get_user_statements_path(user_id)
+
+    if not target_dir.exists():
         return []
 
     # Grab both types
-    pdfs = list(DATA_DIR.glob("*.pdf"))
-    csvs = list(DATA_DIR.glob("*.csv"))
+    pdfs = list(target_dir.glob("*.pdf"))
+    csvs = list(target_dir.glob("*.csv"))
+
     return pdfs + csvs

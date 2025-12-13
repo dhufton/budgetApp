@@ -1,16 +1,50 @@
 # budgetApp/src/app.py
 import streamlit as st
 import pandas as pd
+import extra_streamlit_components as stx
+import uuid
+from datetime import datetime, timedelta
 
+# Import ingestion logic (Ensure these functions accept user_id)
 from ingestion.learning import save_learned_rule
 from ingestion.storage import save_uploaded_file, get_all_statement_paths
 from ingestion.parser import ChaseStatementParser, AmexCSVParser
 from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
-from config import CATEGORY_RULES  # Import here for the dropdown options
+from config import CATEGORY_RULES
 
 # Page Config
 st.set_page_config(page_title="Budget Tracker", layout="wide")
 st.title("📊 Personal Finance Dashboard")
+
+# -----------------------------------------------------------------------------
+# USER SESSION MANAGEMENT (Cookies)
+# -----------------------------------------------------------------------------
+def get_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_manager()
+
+# Try to get user_id from cookie
+user_id = cookie_manager.get(cookie="budget_user_id")
+
+if not user_id:
+    # If no user found, create a new one
+    new_id = str(uuid.uuid4())
+    # Set cookie to expire in 1 year
+    cookie_manager.set("budget_user_id", new_id, expires_at=datetime.now() + timedelta(days=365))
+    st.info("Creating a new secure session for you... Page will reload.")
+    st.stop() # Stop execution to let the cookie write and page reload
+
+# Display Session Info (Optional, good for debugging)
+with st.sidebar:
+    st.caption(f"User Session: {user_id[:8]}...")
+    if st.button("Reset Session"):
+        cookie_manager.delete("budget_user_id")
+        st.rerun()
+
+# -----------------------------------------------------------------------------
+# APP LOGIC
+# -----------------------------------------------------------------------------
 
 # Sidebar for Actions
 with st.sidebar:
@@ -24,15 +58,13 @@ with st.sidebar:
     if uploaded_files:
         with st.spinner("Processing files..."):
             for f in uploaded_files:
-                save_uploaded_file(f)
+                # PASS USER_ID to save files in the user's specific folder
+                save_uploaded_file(f, user_id=user_id)
             st.success(f"Saved {len(uploaded_files)} new statements!")
-            # Clear cache to force reload of new files
             st.cache_data.clear()
 
-# Main Application Logic
-
-# 1. Load ALL stored data
-all_files = get_all_statement_paths()
+# 1. Load ALL stored data for THIS USER
+all_files = get_all_statement_paths(user_id=user_id)
 # Filter for supported extensions
 all_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.csv']]
 
@@ -42,17 +74,18 @@ else:
     # We need a unified parse logic that handles mixed types
     all_dfs = []
 
-    chase_parser = ChaseStatementParser()
-    amex_parser = AmexCSVParser()
+    # Initialize parsers (Pass user_id if they need to load user-specific rules)
+    chase_parser = ChaseStatementParser(user_id=user_id)
+    amex_parser = AmexCSVParser(user_id=user_id)
 
     with st.spinner("Parsing historical data..."):
         for f in all_files:
             try:
                 if f.suffix.lower() == '.pdf':
-                    # It's Chase (or potentially Amex PDF, but we assume Chase based on earlier context)
+                    # Chase / Amex PDF
                     df_file = chase_parser.parse(f)
                 elif f.suffix.lower() == '.csv':
-                    # It's Amex CSV
+                    # Amex CSV
                     df_file = amex_parser.parse(f)
                 else:
                     continue
@@ -81,10 +114,8 @@ else:
             st.warning(f"⚠️ You have {len(uncategorized)} uncategorized transactions. Please review them below.")
 
             with st.expander("📝 Review Uncategorized Items", expanded=True):
-                # Add 'Uncategorized' and 'Ignore' to options
                 options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
 
-                # Create the editor
                 edited_df = st.data_editor(
                     uncategorized[['Date', 'Description', 'Amount', 'Category']],
                     column_config={
@@ -100,18 +131,15 @@ else:
                     key="editor_uncat"
                 )
 
-                # Button to Apply Changes
                 if st.button("Update Categories", key="btn_update_review"):
-                    # Process all edits
                     for index, row in edited_df.iterrows():
                         new_category = row['Category']
 
-                        # 1. Save rule if it's a real category
                         if new_category not in ['Uncategorized', 'Ignore']:
-                            save_learned_rule(row['Description'], new_category)
+                            # PASS USER_ID to save rules to the user's JSON file
+                            save_learned_rule(row['Description'], new_category, user_id=user_id)
 
-                        # 2. Update the main DataFrame (df) in memory
-                        # This ensures visual feedback even before the re-parse happens
+                        # Update in-memory DF for immediate feedback
                         mask = (
                                 (df['Date'] == row['Date']) &
                                 (df['Description'] == row['Description']) &
@@ -120,7 +148,6 @@ else:
                         df.loc[mask, 'Category'] = new_category
 
                     st.success("Categories updated and rules saved!")
-                    # Clear cache to ensure next parse picks up new rules
                     st.cache_data.clear()
                     st.rerun()
 
@@ -129,17 +156,14 @@ else:
         st.markdown("### Snapshot")
         col1, col2, col3 = st.columns(3)
 
-        # Calculate stats for the *latest* month present in data
         latest_month = df['Date'].dt.to_period('M').max()
         current_month_data = df[df['Date'].dt.to_period('M') == latest_month].copy()
 
-        # Calculate Real "Spending" (Excluding Savings)
         non_savings_spend = current_month_data[
                                 (current_month_data['Category'] != 'Savings') &
                                 (current_month_data['Amount'] < 0)
                                 ]['Amount'].sum() * -1
 
-        # Calculate Net Savings
         net_savings = (current_month_data[current_month_data['Category'] == 'Savings']['Amount'] * -1).sum()
 
         col1.metric("Latest Month", str(latest_month))
@@ -149,17 +173,12 @@ else:
         # --- Visualizations ---
         st.markdown("### Financial Trends")
 
-        # Row 1: The Balance Graph
-        # Note: Amex CSVs might have 0 balance, so this graph will mix Chase balances with 0s.
-        # Ideally, we filter out accounts with 0 balance or plot them separately.
-        # For now, it plots whatever is in the 'Balance' column.
         st.plotly_chart(
             create_balance_trend_line(df),
             use_container_width=True,
             key="balance_chart"
         )
 
-        # Row 2: Spending Graphs
         col_chart1, col_chart2 = st.columns([1, 2])
 
         with col_chart1:

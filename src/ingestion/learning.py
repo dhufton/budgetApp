@@ -1,27 +1,27 @@
 # src/ingestion/learning.py
 import json
-from pathlib import Path
-
-# Path to our "brain"
-LEARNING_FILE = Path(__file__).parent.parent / "data" / "learned_categories.json"
+from ingestion.storage import get_user_learning_file
 
 
-def load_learned_rules():
-    """Returns a dict of { "Exact Description": "Category" }"""
-    if not LEARNING_FILE.exists():
+def load_learned_rules(user_id):
+    """Returns a dict of { "Exact Description": "Category" } for the specific user."""
+    learning_file = get_user_learning_file(user_id)
+
+    if not learning_file.exists():
         return {}
 
     try:
-        with open(LEARNING_FILE, "r") as f:
+        with open(learning_file, "r") as f:
             return json.load(f)
     except Exception:
         return {}
 
 
-def save_learned_rule(description, category):
-    rules = load_learned_rules()
-    # STRIP WHITESPACE
+def save_learned_rule(description, category, user_id):
+    """Updates the user's JSON file with a new rule."""
+    rules = load_learned_rules(user_id)
     rules[description.strip()] = category
 
-    with open(LEARNING_FILE, "w") as f:
+    learning_file = get_user_learning_file(user_id)
+    with open(learning_file, "w") as f:
         json.dump(rules, f, indent=4)
