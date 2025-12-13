@@ -1,9 +1,10 @@
+# budgetApp/src/app.py
 import streamlit as st
 import pandas as pd
 
 from ingestion.learning import save_learned_rule
 from ingestion.storage import save_uploaded_file, get_all_statement_paths
-from ingestion.parser import ChaseStatementParser
+from ingestion.parser import ChaseStatementParser, AmexCSVParser
 from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
 from config import CATEGORY_RULES  # Import here for the dropdown options
 
@@ -15,8 +16,8 @@ st.title("📊 Personal Finance Dashboard")
 with st.sidebar:
     st.header("Upload Statements")
     uploaded_files = st.file_uploader(
-        "Upload PDF Statements",
-        type="pdf",
+        "Upload Statements (PDF or CSV)",
+        type=["pdf", "csv"],
         accept_multiple_files=True
     )
 
@@ -25,22 +26,51 @@ with st.sidebar:
             for f in uploaded_files:
                 save_uploaded_file(f)
             st.success(f"Saved {len(uploaded_files)} new statements!")
+            # Clear cache to force reload of new files
+            st.cache_data.clear()
 
 # Main Application Logic
-parser = ChaseStatementParser()
 
 # 1. Load ALL stored data
 all_files = get_all_statement_paths()
+# Filter for supported extensions
+all_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.csv']]
 
 if not all_files:
-    st.info("No statements found. Please upload your Chase PDF statements to begin.")
+    st.info("No statements found. Please upload your Chase PDF or Amex CSV statements to begin.")
 else:
-    # Parse everything found in the data/statements folder
-    df = parser.parse_multiple(all_files)
+    # We need a unified parse logic that handles mixed types
+    all_dfs = []
 
-    if df.empty:
-        st.warning("Statements found but no transactions could be parsed.")
+    chase_parser = ChaseStatementParser()
+    amex_parser = AmexCSVParser()
+
+    with st.spinner("Parsing historical data..."):
+        for f in all_files:
+            try:
+                if f.suffix.lower() == '.pdf':
+                    # It's Chase (or potentially Amex PDF, but we assume Chase based on earlier context)
+                    df_file = chase_parser.parse(f)
+                elif f.suffix.lower() == '.csv':
+                    # It's Amex CSV
+                    df_file = amex_parser.parse(f)
+                else:
+                    continue
+
+                if not df_file.empty:
+                    all_dfs.append(df_file)
+            except Exception as e:
+                st.error(f"Error parsing {f.name}: {e}")
+
+    # Combine all data
+    if not all_dfs:
+        st.warning("Statements were found, but no transactions could be parsed.")
+        df = pd.DataFrame()
     else:
+        df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
+
+    # Only proceed if we have a valid DataFrame
+    if not df.empty:
         # Sort by date
         df = df.sort_values(by="Date", ascending=False)
 
@@ -99,7 +129,7 @@ else:
         st.markdown("### Snapshot")
         col1, col2, col3 = st.columns(3)
 
-        # Calculate stats for the *latest* month
+        # Calculate stats for the *latest* month present in data
         latest_month = df['Date'].dt.to_period('M').max()
         current_month_data = df[df['Date'].dt.to_period('M') == latest_month].copy()
 
@@ -120,6 +150,9 @@ else:
         st.markdown("### Financial Trends")
 
         # Row 1: The Balance Graph
+        # Note: Amex CSVs might have 0 balance, so this graph will mix Chase balances with 0s.
+        # Ideally, we filter out accounts with 0 balance or plot them separately.
+        # For now, it plots whatever is in the 'Balance' column.
         st.plotly_chart(
             create_balance_trend_line(df),
             use_container_width=True,

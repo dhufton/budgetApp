@@ -195,3 +195,61 @@ class ChaseStatementParser:
                     return cat
 
         return "Uncategorized"
+
+
+# src/ingestion/parser.py
+
+# ... existing imports ...
+# Ensure csv is imported
+import csv
+
+
+# ... keep ChaseStatementParser as is ...
+
+class AmexCSVParser:
+    """
+    Parses American Express CSV exports.
+    """
+
+    def parse(self, file_path):
+        try:
+            # Amex CSVs often don't have headers on the first line if exported certain ways,
+            # but your file shows headers: "Date,Description,Card Member,Account #,Amount"
+            df = pd.read_csv(file_path)
+
+            # Map columns to our standard schema
+            # Amex: Date, Description, Amount
+            # We ignore 'Card Member' and 'Account #'
+
+            # 1. Standardize Date
+            # Format in file is DD/MM/YYYY (e.g., 10/12/2025)
+            df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y', errors='coerce')
+
+            # 2. Standardize Amount (CRITICAL STEP)
+            # Amex: Positive = Expense, Negative = Payment
+            # Chase/Our App: Negative = Expense, Positive = Income
+            # So we must INVERT the Amex amount:  Amount = Amount * -1
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce') * -1
+
+            # 3. Create 'Type' column
+            df['Type'] = df['Amount'].apply(lambda x: 'Expense' if x < 0 else 'Income')
+
+            # 4. Clean Description
+            df['Description'] = df['Description'].str.strip()
+
+            # 5. Categorize (Reuse the same logic as Chase)
+            # We need to instantiate the Chase parser just to use its helper,
+            # or better yet, make _get_category a standalone function or mixin.
+            # For now, let's just create an instance of ChaseParser to use its method.
+            chase_parser = ChaseStatementParser()
+            df['Category'] = df['Description'].apply(chase_parser._get_category)
+
+            # 6. Add dummy Balance column (Amex CSV doesn't track running balance)
+            df['Balance'] = 0.0
+
+            # 7. Select and Reorder columns
+            return df[['Date', 'Description', 'Amount', 'Type', 'Category', 'Balance']]
+
+        except Exception as e:
+            print(f"Error parsing Amex CSV {file_path}: {e}")
+            return pd.DataFrame()

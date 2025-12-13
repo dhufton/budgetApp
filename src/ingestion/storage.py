@@ -22,7 +22,11 @@ def save_uploaded_file(uploaded_file):
 
 
 def get_all_statement_paths():
-    """Returns a list of paths to all stored PDF statements."""
+    """Returns a list of paths to all stored statements (PDF and CSV)."""
     if not DATA_DIR.exists():
         return []
-    return list(DATA_DIR.glob("*.pdf"))
+
+    # Grab both types
+    pdfs = list(DATA_DIR.glob("*.pdf"))
+    csvs = list(DATA_DIR.glob("*.csv"))
+    return pdfs + csvs
