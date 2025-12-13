@@ -4,3 +4,4 @@ pdfplumber
 plotly
 watchdog
 extra_streamlit_components
+bcrypt

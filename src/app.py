@@ -5,7 +5,8 @@ import extra_streamlit_components as stx
 import time
 
 from ingestion.learning import save_learned_rule
-from ingestion.storage import save_uploaded_file, get_all_statement_paths, get_user_dir
+from ingestion.storage import (save_uploaded_file, get_all_statement_paths, get_user_dir,
+                               save_user_credentials, verify_user_credentials)
 from ingestion.parser import ChaseStatementParser, AmexCSVParser
 from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
 from config import CATEGORY_RULES
@@ -33,38 +34,48 @@ if not st.session_state['user_id']:
 
     tab1, tab2 = st.tabs(["Login", "Register"])
 
-    with tab1:
+    with tab1:  # LOGIN
         username_input = st.text_input("Username", key="login_user")
+        password_input = st.text_input("Password", type="password", key="login_pw")  # New
+
         if st.button("Login"):
-            # Check if user directory exists
             user_dir = get_user_dir(username_input)
+
+            # 1. Check if user exists
             if user_dir.exists():
-                # Set cookie (expires in 30 days)
-                cookie_manager.set("budget_user_id", username_input, key="set_login")
-                st.session_state['user_id'] = username_input
-                st.success(f"Welcome back, {username_input}!")
-                time.sleep(1)
-                st.rerun()
+                # 2. VERIFY PASSWORD
+                if verify_user_credentials(username_input, password_input):
+                    cookie_manager.set("budget_user_id", username_input, key="set_login")
+                    st.session_state['user_id'] = username_input
+                    st.success(f"Welcome back, {username_input}!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Incorrect password.")
             else:
-                st.error("User not found. Please register first.")
+                st.error("User not found.")
 
-    with tab2:
+    with tab2:  # REGISTER
         new_user = st.text_input("Choose Username", key="reg_user")
+        new_pass = st.text_input("Choose Password", type="password", key="reg_pw")  # New
+
         if st.button("Create Account"):
-            if new_user:
-                # 1. Create directory
-                get_user_dir(new_user)
+            if new_user and new_pass:
+                if get_user_dir(new_user).exists():
+                    st.error("User already exists.")
+                else:
+                    get_user_dir(new_user)
 
-                # 2. SAVE THE NAME (not a UUID) TO COOKIE
-                cookie_manager.set("budget_user_id", new_user, key="set_reg")  # <--- Checks this
+                    # 1. SAVE CREDENTIALS
+                    save_user_credentials(new_user, new_pass)
 
-                st.session_state['user_id'] = new_user
-                st.success(f"Account created for {new_user}!")
-                time.sleep(1)
-                st.rerun()
+                    cookie_manager.set("budget_user_id", new_user, key="set_reg")
+                    st.session_state['user_id'] = new_user
+                    st.success("Account created!")
+                    time.sleep(1)
+                    st.rerun()
             else:
-                st.error("Please enter a username.")
-
+                st.error("Please enter a username and password.")
     st.stop()  # Stop here until logged in
 
 # -----------------------------------------------------------------------------
