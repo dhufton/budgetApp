@@ -1,184 +1,188 @@
 # budgetApp/src/app.py
 import streamlit as st
 import pandas as pd
-import extra_streamlit_components as stx
 import time
+from io import BytesIO
 
-from ingestion.learning import save_learned_rule
-from ingestion.storage import save_uploaded_file, get_all_statement_paths, get_user_dir
+# Supabase and app modules
+from supabase_client import supabase
+from ingestion.learning import save_learned_rule, load_learned_rules
+from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement
 from ingestion.parser import ChaseStatementParser, AmexCSVParser
-from analysis.charts import create_spending_pie_chart, create_monthly_trend_line, create_balance_trend_line
+from analysis.charts import (
+    create_spending_pie_chart,
+    create_monthly_trend_line,
+    create_balance_trend_line,
+)
 from config import CATEGORY_RULES
 
-# Page Config
+# --- Page and Session Setup ---
 st.set_page_config(page_title="Budget Tracker", layout="wide")
 
 
-# -----------------------------------------------------------------------------
-# SESSION & AUTHENTICATION
-# -----------------------------------------------------------------------------
-def get_manager():
-    return stx.CookieManager()
+def get_current_user():
+    return st.session_state.get("user")
 
 
-cookie_manager = get_manager()
+def set_current_user(user):
+    st.session_state["user"] = user
 
-# 1. Try to get logged-in user from cookie
-if 'user_id' not in st.session_state:
-    st.session_state['user_id'] = cookie_manager.get(cookie="budget_user_id")
 
-# 2. Authentication Flow
-if not st.session_state['user_id']:
-    st.title("🔐 Login")
+def logout():
+    st.session_state.pop("user", None)
 
-    tab1, tab2 = st.tabs(["Login", "Register"])
 
-    with tab1:
-        username_input = st.text_input("Username", key="login_user")
+# --- Authentication UI ---
+def auth_view():
+    st.title("🔐 Budget Tracker Login")
+    st.write("Log in to access your dashboard or register for a new account.")
+
+    tab_login, tab_register = st.tabs(["Login", "Register"])
+
+    with tab_login:
+        email = st.text_input("Email", key="login_email")
+        password = st.text_input("Password", type="password", key="login_password")
         if st.button("Login"):
-            # Check if user directory exists
-            user_dir = get_user_dir(username_input)
-            if user_dir.exists():
-                # Set cookie (expires in 30 days)
-                cookie_manager.set("budget_user_id", username_input, key="set_login")
-                st.session_state['user_id'] = username_input
-                st.success(f"Welcome back, {username_input}!")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("User not found. Please register first.")
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                if res.user:
+                    set_current_user(res.user)
+                    st.success(f"Welcome back, {email}!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Login failed. Please check your credentials.")
+            except Exception as e:
+                st.error(f"An error occurred during login: {e}")
 
-    with tab2:
-        new_user = st.text_input("Choose Username", key="reg_user")
+    with tab_register:
+        email_r = st.text_input("Email", key="reg_email")
+        password_r = st.text_input("Password", type="password", key="reg_password")
+        username_r = st.text_input("Display Name", key="reg_username", placeholder="Optional")
         if st.button("Create Account"):
-            if new_user:
-                # 1. Create directory
-                get_user_dir(new_user)
+            try:
+                res = supabase.auth.sign_up({"email": email_r, "password": password_r})
+                if res.user:
+                    supabase.table("users").insert({
+                        "id": res.user.id,
+                        "username": username_r or email_r.split('@')[0],
+                    }).execute()
+                    st.success("Account created! Please check your email for a confirmation link, then log in.")
+                else:
+                    st.error("Registration failed.")
+            except Exception as e:
+                st.error(f"An error occurred during registration: {e}")
 
-                # 2. SAVE THE NAME (not a UUID) TO COOKIE
-                cookie_manager.set("budget_user_id", new_user, key="set_reg")  # <--- Checks this
 
-                st.session_state['user_id'] = new_user
-                st.success(f"Account created for {new_user}!")
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.error("Please enter a username.")
+# --- Main App Logic ---
+user = get_current_user()
 
-    st.stop()  # Stop here until logged in
+if not user:
+    auth_view()
+    st.stop()
 
-# -----------------------------------------------------------------------------
-# MAIN APP (Only runs if logged in)
-# -----------------------------------------------------------------------------
-user_id = st.session_state['user_id']
+# If we are here, user is logged in
+user_id = user.id
+user_email = user.email
 
-# Sidebar User Info
+# --- Sidebar ---
 with st.sidebar:
-    st.write(f"👤 **{user_id}**")
+    st.write(f"👤 **{user_email}**")
     if st.button("Logout"):
-        cookie_manager.delete("budget_user_id")
-        st.session_state['user_id'] = None
+        supabase.auth.sign_out()
+        logout()
         st.rerun()
     st.divider()
 
-st.title("📊 Personal Finance Dashboard")
-
-# Upload Logic
-with st.sidebar:
     st.header("Upload Statements")
     uploaded_files = st.file_uploader(
         "Upload Statements (PDF or CSV)",
         type=["pdf", "csv"],
         accept_multiple_files=True
     )
-
     if uploaded_files:
-        with st.spinner("Processing files..."):
+        with st.spinner("Uploading and processing files..."):
             for f in uploaded_files:
                 save_uploaded_file(f, user_id=user_id)
             st.success(f"Saved {len(uploaded_files)} new statements!")
             st.cache_data.clear()
 
-# Load Data
-all_files = get_all_statement_paths(user_id=user_id)
-all_files = [f for f in all_files if f.suffix.lower() in ['.pdf', '.csv']]
+# --- Dashboard ---
+st.title("📊 Personal Finance Dashboard")
 
-if not all_files:
-    st.info(f"Welcome, {user_id}! You have no statements yet. Upload them in the sidebar.")
+# Load data from Supabase
+all_paths = get_all_statement_paths(user_id=user_id)
+
+if not all_paths:
+    st.info(f"Welcome, {user_email}! You have no statements yet. Upload them in the sidebar.")
 else:
-    # ... (Rest of your exact app logic goes here) ...
-    # ... (Copy-paste the parsing logic from the previous step) ...
-
-    # Initialize parsers
     all_dfs = []
     chase_parser = ChaseStatementParser(user_id=user_id)
     amex_parser = AmexCSVParser(user_id=user_id)
 
-    with st.spinner("Parsing historical data..."):
-        for f in all_files:
+    with st.spinner("Parsing historical data from the cloud..."):
+        for storage_path in all_paths:
+            content_bytes = download_statement(storage_path)
+            if not content_bytes:
+                continue
+
+            file_name = storage_path.split("/")[-1]
+            file_stream = BytesIO(content_bytes)
+
             try:
-                if f.suffix.lower() == '.pdf':
-                    df_file = chase_parser.parse(f)
-                elif f.suffix.lower() == '.csv':
-                    df_file = amex_parser.parse(f)
+                if file_name.lower().endswith(".pdf"):
+                    df_file = chase_parser.parse(file_stream)
+                elif file_name.lower().endswith(".csv"):
+                    df_file = amex_parser.parse(file_stream)
                 else:
                     continue
 
                 if not df_file.empty:
                     all_dfs.append(df_file)
             except Exception as e:
-                st.error(f"Error parsing {f.name}: {e}")
+                st.error(f"Failed to parse {file_name}: {e}")
 
+    # Combine dataframes and display UI
     if not all_dfs:
-        st.warning("Statements found but no transactions parsed.")
-        df = pd.DataFrame()
+        st.warning("Statements found, but no transactions could be parsed.")
     else:
         df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
-
-    if not df.empty:
         df = df.sort_values(by="Date", ascending=False)
 
-        # --- UNCATEGORIZED QUEUE ---
+        # --- Review Queue ---
         uncategorized = df[df['Category'] == 'Uncategorized'].copy()
-
         if not uncategorized.empty:
-            st.warning(f"⚠️ {len(uncategorized)} uncategorized items.")
+            st.warning(f"⚠️ You have {len(uncategorized)} uncategorized transactions to review.")
             with st.expander("📝 Review Queue", expanded=True):
                 options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
                 edited_df = st.data_editor(
                     uncategorized[['Date', 'Description', 'Amount', 'Category']],
-                    column_config={"Category": st.column_config.SelectboxColumn("Assign", options=options)},
-                    hide_index=True, use_container_width=True, key="editor_uncat"
+                    column_config={"Category": st.column_config.SelectboxColumn("Assign Category", options=options)},
+                    hide_index=True, use_container_width=True, key="editor"
                 )
                 if st.button("Update Categories", key="btn_update"):
-                    for index, row in edited_df.iterrows():
+                    for _, row in edited_df.iterrows():
                         if row['Category'] not in ['Uncategorized', 'Ignore']:
                             save_learned_rule(row['Description'], row['Category'], user_id=user_id)
-                    st.success("Saved!")
-                    st.cache_data.clear()
+                    st.success("Rules saved!")
                     st.rerun()
 
-        # --- DASHBOARD ---
+        # --- Metrics & Charts ---
         st.divider()
-        st.markdown("### Snapshot")
+        st.markdown("### Dashboard Snapshot")
         col1, col2, col3 = st.columns(3)
-
         latest_month = df['Date'].dt.to_period('M').max()
         month_df = df[df['Date'].dt.to_period('M') == latest_month]
-
-        # Metrics
         spend = month_df[(month_df['Category'] != 'Savings') & (month_df['Amount'] < 0)]['Amount'].sum() * -1
-        save = (month_df[month_df['Category'] == 'Savings']['Amount'] * -1).sum()
+        saved = (month_df[month_df['Category'] == 'Savings']['Amount'] * -1).sum()
+        col1.metric("Latest Month", str(latest_month))
+        col2.metric("Total Spent", f"£{spend:,.2f}")
+        col3.metric("Net Saved", f"£{saved:,.2f}")
 
-        col1.metric("Month", str(latest_month))
-        col2.metric("Spent", f"£{spend:,.2f}")
-        col3.metric("Saved", f"£{save:,.2f}")
-
-        # Charts
-        st.plotly_chart(create_balance_trend_line(df), use_container_width=True, key="bal")
+        st.plotly_chart(create_balance_trend_line(df), use_container_width=True, key="balance_chart")
         c1, c2 = st.columns([1, 2])
-        c1.plotly_chart(create_spending_pie_chart(df), use_container_width=True, key="pie")
-        c2.plotly_chart(create_monthly_trend_line(df), use_container_width=True, key="line")
+        c1.plotly_chart(create_spending_pie_chart(df), use_container_width=True, key="pie_chart")
+        c2.plotly_chart(create_monthly_trend_line(df), use_container_width=True, key="trend_chart")
 
-        with st.expander("Raw Data"):
+        with st.expander("View All Transaction Data"):
             st.dataframe(df)

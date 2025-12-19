@@ -1,27 +1,30 @@
-# src/ingestion/learning.py
-import json
-from ingestion.storage import get_user_learning_file
+# budgetApp/src/ingestion/learning.py
+from supabase_client import supabase
 
-
-def load_learned_rules(user_id):
-    """Returns a dict of { "Exact Description": "Category" } for the specific user."""
-    learning_file = get_user_learning_file(user_id)
-
-    if not learning_file.exists():
-        return {}
-
+def load_learned_rules(user_id: str) -> dict:
+    """
+    Loads all categorization rules for a specific user from the 'rules' table.
+    Returns a dictionary of {description: category}.
+    """
     try:
-        with open(learning_file, "r") as f:
-            return json.load(f)
-    except Exception:
+        res = supabase.table("rules").select("description, category").eq("user_id", user_id).execute()
+        rules = {row["description"]: row["category"] for row in res.data}
+        return rules
+    except Exception as e:
+        print(f"Could not load rules for user {user_id}: {e}")
         return {}
 
-
-def save_learned_rule(description, category, user_id):
-    """Updates the user's JSON file with a new rule."""
-    rules = load_learned_rules(user_id)
-    rules[description.strip()] = category
-
-    learning_file = get_user_learning_file(user_id)
-    with open(learning_file, "w") as f:
-        json.dump(rules, f, indent=4)
+def save_learned_rule(description: str, category: str, user_id: str):
+    """
+    Saves or updates a specific categorization rule for a user.
+    Uses 'upsert' to either insert a new rule or update an existing one.
+    """
+    try:
+        description = description.strip()
+        supabase.table("rules").upsert({
+            "user_id": user_id,
+            "description": description,
+            "category": category,
+        }, on_conflict="user_id,description").execute()
+    except Exception as e:
+        print(f"Could not save rule for user {user_id}: {e}")

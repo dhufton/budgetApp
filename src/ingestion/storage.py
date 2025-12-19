@@ -1,73 +1,56 @@
 # budgetApp/src/ingestion/storage.py
-import os
-from pathlib import Path
+from supabase_client import supabase
+from io import BytesIO
 
-# Base path: budgetApp/data/
-BASE_DATA_DIR = Path(__file__).parent.parent.parent / "data"
+BUCKET_NAME = "statements"
 
 
-def get_user_dir(user_id):
+def save_uploaded_file(uploaded_file, user_id: str):
     """
-    Returns Path('data/users/{user_id}')
-    Creates the directory if it doesn't exist.
+    Uploads the file to Supabase Storage under path {user_id}/{filename}.
+    Returns the storage path.
     """
-    path = BASE_DATA_DIR / "users" / user_id
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    # Define a unique path in the bucket for this user and file
+    storage_path = f"{user_id}/{uploaded_file.name}"
+
+    file_bytes = uploaded_file.getvalue()
+
+    # Upload the file, upsert=True means it will overwrite if it already exists
+    supabase.storage.from_(BUCKET_NAME).upload(
+        path=storage_path,
+        file=file_bytes,
+        file_options={"upsert": True}
+    )
+
+    # Optionally, log the upload in your 'statements' table for tracking
+    supabase.table("statements").upsert({
+        "user_id": user_id,
+        "filename": uploaded_file.name,
+    }, on_conflict="user_id,filename").execute()
+
+    return storage_path
 
 
-def get_user_statements_path(user_id):
+def get_all_statement_paths(user_id: str):
     """
-    Returns Path('data/users/{user_id}/statements')
-    Creates the directory if it doesn't exist.
+    Returns a list of full object paths in Supabase Storage for this user.
+    e.g., ["user_abc/statement1.pdf", "user_abc/statement2.csv"]
     """
-    path = get_user_dir(user_id) / "statements"
-    path.mkdir(exist_ok=True)
-    return path
-
-
-def get_user_learning_file(user_id):
-    """
-    Returns Path('data/users/{user_id}/learned_categories.json')
-    Does NOT create the file, just returns the path.
-    """
-    return get_user_dir(user_id) / "learned_categories.json"
-
-
-def save_uploaded_file(uploaded_file, user_id):
-    """
-    Saves a Streamlit uploaded file to the user's specific statements directory.
-    Returns the path to the saved file.
-
-    Args:
-        uploaded_file: The file object from st.file_uploader
-        user_id (str): The unique ID of the user (from cookie)
-    """
-    # Get the user's statement folder
-    target_dir = get_user_statements_path(user_id)
-
-    file_path = target_dir / uploaded_file.name
-
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    return file_path
-
-
-def get_all_statement_paths(user_id):
-    """
-    Returns a list of paths to all stored statements (PDF and CSV) for a specific user.
-
-    Args:
-        user_id (str): The unique ID of the user
-    """
-    target_dir = get_user_statements_path(user_id)
-
-    if not target_dir.exists():
+    try:
+        # List all files in the user's "folder"
+        res = supabase.storage.from_(BUCKET_NAME).list(path=user_id)
+        # res is a list of dicts with a 'name' key, e.g., [{'name': 'statement1.pdf'}, ...]
+        return [f"{user_id}/{f['name']}" for f in res]
+    except Exception as e:
+        print(f"Could not list files for user {user_id}: {e}")
         return []
 
-    # Grab both types
-    pdfs = list(target_dir.glob("*.pdf"))
-    csvs = list(target_dir.glob("*.csv"))
 
-    return pdfs + csvs
+def download_statement(storage_path: str) -> bytes:
+    """Download a file's content from storage as bytes."""
+    try:
+        res = supabase.storage.from_(BUCKET_NAME).download(storage_path)
+        return res
+    except Exception as e:
+        print(f"Failed to download {storage_path}: {e}")
+        return None
