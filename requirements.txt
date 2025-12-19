@@ -5,3 +5,4 @@ plotly
 watchdog
 extra_streamlit_components
 supabase
+st-supabase-connection

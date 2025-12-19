@@ -4,13 +4,9 @@ from supabase_client import supabase
 BUCKET_NAME = "statements"
 
 def save_uploaded_file(uploaded_file, user_id: str):
-    """
-    Uploads the file to Supabase Storage under path {user_id}/{filename}.
-    """
     storage_path = f"{user_id}/{uploaded_file.name}"
-    file_bytes = uploaded_file.getvalue()  # Streamlit UploadedFile -> bytes
+    file_bytes = uploaded_file.getvalue()
 
-    # Debug logs
     print("DEBUG storage_path:", storage_path)
     print("DEBUG bytes_type:", type(file_bytes), "len:", len(file_bytes))
 
