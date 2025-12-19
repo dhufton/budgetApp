@@ -4,32 +4,16 @@ from io import BytesIO
 
 BUCKET_NAME = "statements"
 
-
 def save_uploaded_file(uploaded_file, user_id: str):
-    """
-    Uploads the file to Supabase Storage under path {user_id}/{filename}.
-    Returns the storage path.
-    """
-    # Define a unique path in the bucket for this user and file
     storage_path = f"{user_id}/{uploaded_file.name}"
-
     file_bytes = uploaded_file.getvalue()
 
-    # Upload the file, upsert=True means it will overwrite if it already exists
-    supabase.storage.from_(BUCKET_NAME).upload(
+    # This call now has a valid 'Authorization' header
+    supabase.storage.from_("statements").upload(
         path=storage_path,
         file=file_bytes,
         file_options={"upsert": True}
     )
-
-    # Optionally, log the upload in your 'statements' table for tracking
-    supabase.table("statements").upsert({
-        "user_id": user_id,
-        "filename": uploaded_file.name,
-    }, on_conflict="user_id,filename").execute()
-
-    return storage_path
-
 
 def get_all_statement_paths(user_id: str):
     """

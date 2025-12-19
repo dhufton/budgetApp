@@ -32,6 +32,21 @@ def logout():
     st.session_state.pop("user", None)
 
 
+if "supabase_session" in st.session_state:
+    try:
+        # Restore the session so the client is authenticated for this rerun
+        session = st.session_state["supabase_session"]
+        supabase.auth.set_session(session.access_token, session.refresh_token)
+    except Exception:
+        # If session is invalid/expired, clear it
+        st.session_state.pop("supabase_session", None)
+        st.session_state.pop("user", None)
+
+def set_current_user(res):
+    """Stores both user and session data."""
+    st.session_state["user"] = res.user
+    st.session_state["supabase_session"] = res.session
+
 # --- Authentication UI ---
 def auth_view():
     st.title("🔐 Budget Tracker Login")
@@ -43,17 +58,11 @@ def auth_view():
         email = st.text_input("Email", key="login_email")
         password = st.text_input("Password", type="password", key="login_password")
         if st.button("Login"):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                if res.user:
-                    set_current_user(res.user)
-                    st.success(f"Welcome back, {email}!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.error("Login failed. Please check your credentials.")
-            except Exception as e:
-                st.error(f"An error occurred during login: {e}")
+            res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+            if res.session:
+                set_current_user(res)
+                st.success("Logged in!")
+                st.rerun()
 
     with tab_register:
         email_r = st.text_input("Email", key="reg_email")
