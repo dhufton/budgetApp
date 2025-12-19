@@ -15,10 +15,10 @@ def save_uploaded_file(uploaded_file, user_id: str):
         file=file_bytes,
     )
 
-    supabase.table("statements").upsert(
-        {"user_id": user_id, "filename": uploaded_file.name},
-        on_conflict="user_id,filename"
-    ).execute()
+    # supabase.table("statements").upsert(
+    #     {"user_id": user_id, "filename": uploaded_file.name},
+    #     on_conflict="user_id,filename"
+    # ).execute()
 
     return storage_path
 
