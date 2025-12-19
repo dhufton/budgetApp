@@ -3,12 +3,12 @@ import streamlit as st
 from st_supabase_connection import SupabaseConnection
 
 @st.cache_resource
-def get_supabase_client():
+def get_supabase_connection():
     return st.connection(
         "supabase",
         type=SupabaseConnection,
-        url=st.secrets["SUPABASE_URL"],
-        key=st.secrets["SUPABASE_KEY"],
     )
 
-supabase = get_supabase_client()
+supabase_conn = get_supabase_connection()
+
+supabase = supabase_conn.client
