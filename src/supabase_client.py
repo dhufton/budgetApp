@@ -6,15 +6,9 @@ from st_supabase_connection import SupabaseConnection
 def get_supabase_connection() -> SupabaseConnection:
     """
     Returns the Streamlit Supabase connection wrapper.
-    The URL and key are read from [connections.supabase] in Streamlit secrets.
+    URL and key come from [connections.supabase] in secrets.
     """
-    return st.connection(
-        "supabase",
-        type=SupabaseConnection,
-    )
+    return st.connection("supabase", type=SupabaseConnection)
 
-# This is the Streamlit connection wrapper
 supabase_conn = get_supabase_connection()
-
-# This is the actual supabase-py client
-supabase = supabase_conn.client
+supabase = supabase_conn.client  # This is the supabase-py Client
