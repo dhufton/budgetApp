@@ -4,33 +4,42 @@ from supabase_client import supabase
 BUCKET_NAME = "statements"
 
 def save_uploaded_file(uploaded_file, user_id: str):
+    """
+    Uploads the file to Supabase Storage under path {user_id}/{filename}.
+    """
     storage_path = f"{user_id}/{uploaded_file.name}"
     file_bytes = uploaded_file.getvalue()
 
+    # Debug logs
     print("DEBUG storage_path:", storage_path)
     print("DEBUG bytes_type:", type(file_bytes), "len:", len(file_bytes))
 
+    # Upload file to storage
+    # For public bucket, no extra options needed
     supabase.storage.from_(BUCKET_NAME).upload(
         path=storage_path,
         file=file_bytes,
     )
 
-    # supabase.table("statements").upsert(
-    #     {"user_id": user_id, "filename": uploaded_file.name},
-    #     on_conflict="user_id,filename"
-    # ).execute()
-
     return storage_path
 
 def get_all_statement_paths(user_id: str):
+    """
+    Returns a list of full object paths in Supabase Storage for this user.
+    e.g., ["user_abc/statement1.pdf", "user_abc/statement2.csv"]
+    """
     try:
         res = supabase.storage.from_(BUCKET_NAME).list(path=user_id)
+        # res is a list of dicts with 'name' keys
         return [f"{user_id}/{f['name']}" for f in res]
     except Exception as e:
         print(f"Could not list files for user {user_id}: {e}")
         return []
 
 def download_statement(storage_path: str) -> bytes:
+    """
+    Download a file's content from storage as bytes.
+    """
     try:
         return supabase.storage.from_(BUCKET_NAME).download(storage_path)
     except Exception as e:

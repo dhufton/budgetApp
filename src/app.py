@@ -4,10 +4,9 @@ import pandas as pd
 import time
 from io import BytesIO
 
-# Supabase and app modules
 from supabase_client import supabase
-from ingestion.learning import save_learned_rule, load_learned_rules
 from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement
+from ingestion.learning import save_learned_rule
 from ingestion.parser import ChaseStatementParser, AmexCSVParser
 from analysis.charts import (
     create_spending_pie_chart,
@@ -16,105 +15,131 @@ from analysis.charts import (
 )
 from config import CATEGORY_RULES
 
-# --- Page and Session Setup ---
 st.set_page_config(page_title="Budget Tracker", layout="wide")
-
 
 def get_current_user():
     return st.session_state.get("user")
 
-
-def set_current_user(user):
-    st.session_state["user"] = user
-
-
-def logout():
-    st.session_state.pop("user", None)
-
-
-if "supabase_session" in st.session_state:
-    try:
-        # Restore the session so the client is authenticated for this rerun
-        session = st.session_state["supabase_session"]
-        supabase.auth.set_session(session.access_token, session.refresh_token)
-    except Exception:
-        # If session is invalid/expired, clear it
-        st.session_state.pop("supabase_session", None)
-        st.session_state.pop("user", None)
-
 def set_current_user(res):
-    """Stores both user and session data."""
     st.session_state["user"] = res.user
     st.session_state["supabase_session"] = res.session
 
-# --- Authentication UI ---
+def logout():
+    st.session_state.pop("user", None)
+    st.session_state.pop("supabase_session", None)
+
+# Hydrate supabase session on rerun if we have it
+if "supabase_session" in st.session_state:
+    try:
+        session = st.session_state["supabase_session"]
+        supabase.auth.set_session(session.access_token, session.refresh_token)
+    except Exception:
+        logout()
+
 def auth_view():
     st.title("🔐 Budget Tracker Login")
-    st.write("Log in to access your dashboard or register for a new account.")
-
     tab_login, tab_register = st.tabs(["Login", "Register"])
 
     with tab_login:
         email = st.text_input("Email", key="login_email")
-        password = st.text_input("Password", type="password", key="login_password")
+        password = st.text_input("Password", type="password", key="login_pw")
         if st.button("Login"):
-            res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-            if res.session:
-                set_current_user(res)
-                st.success("Logged in!")
-                st.rerun()
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                if res.session:
+                    set_current_user(res)
+                    st.success(f"Welcome back, {email}!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("Login failed.")
+            except Exception as e:
+                st.error(f"Login error: {e}")
 
     with tab_register:
         email_r = st.text_input("Email", key="reg_email")
-        password_r = st.text_input("Password", type="password", key="reg_password")
-        username_r = st.text_input("Display Name", key="reg_username", placeholder="Optional")
-        if st.button("Create Account"):
+        password_r = st.text_input("Password", type="password", key="reg_pw")
+        username_r = st.text_input("Display Name", key="reg_username")
+        if st.button("Create account"):
             try:
                 res = supabase.auth.sign_up({"email": email_r, "password": password_r})
                 if res.user:
                     supabase.table("users").insert({
                         "id": res.user.id,
-                        "username": username_r or email_r.split('@')[0],
+                        "username": username_r or email_r.split("@")[0],
                     }).execute()
-                    st.success("Account created! Please check your email for a confirmation link, then log in.")
+                    st.success("Account created. Please confirm your email and log in.")
                 else:
                     st.error("Registration failed.")
             except Exception as e:
-                st.error(f"An error occurred during registration: {e}")
+                st.error(f"Registration error: {e}")
 
-
-# --- Main App Logic ---
 user = get_current_user()
-
 if not user:
     auth_view()
     st.stop()
 
-# If we are here, user is logged in
 user_id = user.id
 user_email = user.email
 
-# --- Sidebar ---
+# Sidebar
 with st.sidebar:
-    st.write(f"👤 **{user_email}**")
+    st.write(f"👤 {user_email}")
     if st.button("Logout"):
         supabase.auth.sign_out()
         logout()
         st.rerun()
-    st.divider()
 
     st.header("Upload Statements")
     uploaded_files = st.file_uploader(
         "Upload Statements (PDF or CSV)",
         type=["pdf", "csv"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
     )
+
     if uploaded_files:
         with st.spinner("Uploading and processing files..."):
             for f in uploaded_files:
                 save_uploaded_file(f, user_id=user_id)
             st.success(f"Saved {len(uploaded_files)} new statements!")
             st.cache_data.clear()
+
+st.title("📊 Personal Finance Dashboard")
+
+# Load & parse data
+paths = get_all_statement_paths(user_id=user_id)
+if not paths:
+    st.info("No statements found yet. Upload using the sidebar.")
+    st.stop()
+
+all_dfs = []
+chase_parser = ChaseStatementParser(user_id=user_id)
+amex_parser = AmexCSVParser(user_id=user_id)
+
+with st.spinner("Parsing statements from storage..."):
+    for storage_path in paths:
+        content = download_statement(storage_path)
+        if not content:
+            continue
+        name = storage_path.split("/")[-1]
+        file_stream = BytesIO(content)
+        try:
+            if name.lower().endswith(".pdf"):
+                df_file = chase_parser.parse(file_stream)
+            elif name.lower().endswith(".csv"):
+                df_file = amex_parser.parse(file_stream)
+            else:
+                continue
+            if not df_file.empty:
+                all_dfs.append(df_file)
+        except Exception as e:
+            st.error(f"Failed to parse {name}: {e}")
+
+if not all_dfs:
+    st.warning("Files found but no transactions parsed.")
+    st.stop()
+
+df = pd.concat(all_dfs, ignore_index=True).drop_duplicates().sort_values("Date", ascending=False)
 
 # --- Dashboard ---
 st.title("📊 Personal Finance Dashboard")
