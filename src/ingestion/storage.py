@@ -1,19 +1,33 @@
 # budgetApp/src/ingestion/storage.py
 from supabase_client import supabase
-from io import BytesIO
 
 BUCKET_NAME = "statements"
 
 def save_uploaded_file(uploaded_file, user_id: str):
+    """
+    Uploads the file to Supabase Storage under path {user_id}/{filename}.
+    """
     storage_path = f"{user_id}/{uploaded_file.name}"
-    file_bytes = uploaded_file.getvalue()
+    file_bytes = uploaded_file.getvalue()  # Streamlit UploadedFile -> bytes
 
-    # This call now has a valid 'Authorization' header
-    supabase.storage.from_("statements").upload(
+    # Debug logs (temporarily)
+    print("DEBUG storage_path:", storage_path)
+    print("DEBUG bytes_type:", type(file_bytes), "len:", len(file_bytes))
+
+    # Plain upload call
+    supabase.storage.from_(BUCKET_NAME).upload(
         path=storage_path,
         file=file_bytes,
-        file_options={"upsert": True}
+        file_options={"upsert": True},
     )
+
+    # Optional metadata in DB (safe)
+    supabase.table("statements").upsert(
+        {"user_id": user_id, "filename": uploaded_file.name},
+        on_conflict="user_id,filename"
+    ).execute()
+
+    return storage_path
 
 def get_all_statement_paths(user_id: str):
     """
