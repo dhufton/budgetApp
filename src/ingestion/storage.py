@@ -17,7 +17,6 @@ def save_uploaded_file(uploaded_file, user_id: str):
     supabase.storage.from_(BUCKET_NAME).upload(
         path=storage_path,
         file=file_bytes,
-        file_options={"upsert": True},
     )
 
     supabase.table("statements").upsert(
