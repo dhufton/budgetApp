@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import time
 from io import BytesIO
+from datetime import datetime
 
 from supabase_client import supabase
 from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement
@@ -32,7 +33,13 @@ def logout():
     st.session_state.pop("supabase_session", None)
 
 
-# Hydrate supabase session on rerun if we have it
+# Initialize session state
+if "upload_complete" not in st.session_state:
+    st.session_state.upload_complete = False
+if "cache_buster" not in st.session_state:
+    st.session_state.cache_buster = 0
+
+# Hydrate supabase session
 if "supabase_session" in st.session_state:
     try:
         session = st.session_state["supabase_session"]
@@ -56,8 +63,6 @@ def auth_view():
                     st.success(f"Welcome back, {email}!")
                     time.sleep(1)
                     st.rerun()
-                else:
-                    st.error("Login failed.")
             except Exception as e:
                 st.error(f"Login error: {e}")
 
@@ -74,8 +79,6 @@ def auth_view():
                         "username": username_r or email_r.split("@")[0],
                     }).execute()
                     st.success("Account created. Please confirm your email and log in.")
-                else:
-                    st.error("Registration failed.")
             except Exception as e:
                 st.error(f"Registration error: {e}")
 
@@ -88,15 +91,11 @@ if not user:
 user_id = user.id
 user_email = user.email
 
-# === UPLOAD STATE MANAGEMENT ===
-if "upload_complete" not in st.session_state:
-    st.session_state.upload_complete = False
-
 # === MAIN DASHBOARD ===
 st.title("📊 Personal Finance Dashboard")
 st.sidebar.markdown(f"👤 **{user_email}**")
 
-# Sidebar: Logout + Upload
+# Sidebar
 with st.sidebar:
     if st.button("🚪 Logout", use_container_width=True):
         supabase.auth.sign_out()
@@ -106,59 +105,62 @@ with st.sidebar:
     st.divider()
     st.header("📁 Upload Statements")
 
-    # Show upload success message
+    # Success message
     if st.session_state.upload_complete:
         st.success("✅ Files uploaded successfully!")
-        st.info("Dashboard refreshed with new data.")
-        st.session_state.upload_complete = False  # Reset flag
+        st.rerun()  # Refresh dashboard immediately
 
+    # File uploader
     uploaded_files = st.file_uploader(
         "Upload Statements (PDF or CSV)",
         type=["pdf", "csv"],
         accept_multiple_files=True,
-        key="file_uploader",  # Unique key prevents re-trigger
+        key="file_uploader_unique"
     )
 
-    # Handle uploads ONLY when files change AND not already processing
-    if uploaded_files and not st.session_state.get("upload_complete", False):
-        col1, col2 = st.columns([3, 1])
-        if col2.button("🚀 Process Files", use_container_width=True, key="process_btn"):
-            with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
-                success_count = 0
-                existing_files = set(get_all_statement_paths(user_id))
+    # Process button (outside columns to avoid sidebar bug)
+    if uploaded_files and st.button("🚀 Process Files", use_container_width=True):
+        with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
+            success_count = 0
+            existing_files = set(get_all_statement_paths(user_id))
 
-                for f in uploaded_files:
-                    filename = f"{user_id}/{f.name}"
+            for f in uploaded_files:
+                filename = f"{user_id}/{f.name}"
 
-                    # Skip duplicates
-                    if filename in existing_files:
-                        st.sidebar.warning(f"⏭️ {f.name} already exists")
-                        continue
+                if filename in existing_files:
+                    st.warning(f"⏭️ {f.name} already exists")
+                    continue
 
-                    try:
-                        save_uploaded_file(f, user_id=user_id)
-                        success_count += 1
-                        existing_files.add(filename)
-                        print(f"SUCCESS: Uploaded {f.name}")
-                    except Exception as e:
-                        st.sidebar.error(f"❌ {f.name}: {e}")
-                        print(f"ERROR: {e}")
+                try:
+                    # 1. Upload to B2
+                    storage_path = save_uploaded_file(f, user_id=user_id)
 
-                if success_count > 0:
-                    st.session_state.upload_complete = True
-                    st.session_state.cache_buster = st.session_state.get("cache_buster", 0) + 1
-                    st.cache_data.clear()
-                    st.rerun()
-                else:
-                    st.sidebar.warning("No new files to upload.")
+                    # 2. Save metadata to Supabase (CRITICAL!)
+                    supabase.table("statements").insert({
+                        "user_id": user_id,
+                        "storage_key": storage_path,
+                        "file_name": f.name,
+                        "uploaded_at": datetime.utcnow().isoformat()
+                    }).execute()
+
+                    success_count += 1
+                    print(f"SUCCESS: {f.name} -> {storage_path}")
+                except Exception as e:
+                    st.error(f"❌ {f.name}: {e}")
+
+            if success_count > 0:
+                st.session_state.upload_complete = True
+                st.session_state.cache_buster += 1
+                st.cache_data.clear()
+                st.success(f"✅ Saved {success_count} new statements!")
+                st.rerun()
 
 
-# === DATA LOADING & PARSING ===
-@st.cache_data(ttl=60)  # Short TTL + manual invalidation
+# === DATA LOADING ===
+@st.cache_data(ttl=60, show_spinner=False)
 def load_and_parse_statements(_user_id, _cache_buster):
-    """Load and parse all user statements from B2 storage."""
     paths = get_all_statement_paths(user_id=_user_id)
-    print(f"DEBUG: Loading {len(paths)} paths for user {_user_id}")
+    st.write(f"🔍 Found {len(paths)} statements")  # DEBUG
 
     if not paths:
         return pd.DataFrame()
@@ -167,10 +169,10 @@ def load_and_parse_statements(_user_id, _cache_buster):
     chase_parser = ChaseStatementParser(user_id=_user_id)
     amex_parser = AmexCSVParser(user_id=_user_id)
 
-    for storage_path in paths:
+    for i, storage_path in enumerate(paths):
         content = download_statement(storage_path)
-        if not content:
-            print(f"DEBUG: Empty content for {storage_path}")
+        if not content or len(content) == 0:
+            print(f"Empty content: {storage_path}")
             continue
 
         file_name = storage_path.split("/")[-1]
@@ -185,54 +187,48 @@ def load_and_parse_statements(_user_id, _cache_buster):
                 continue
 
             if not df_file.empty:
-                print(f"DEBUG: Parsed {len(df_file)} rows from {file_name}")
+                print(f"Parsed {len(df_file)} rows from {file_name}")
                 all_dfs.append(df_file)
         except Exception as e:
-            print(f"Failed to parse {file_name}: {e}")
+            print(f"Parse error {storage_path}: {e}")
 
     if not all_dfs:
-        print("DEBUG: No dataframes parsed")
         return pd.DataFrame()
 
     df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
-    print(f"DEBUG: Combined {len(df)} total transactions")
     return df.sort_values("Date", ascending=False)
 
 
-# Add cache buster that changes after upload
-cache_buster = st.session_state.get("cache_buster", 0)
-
-# Load data with cache buster
-df = load_and_parse_statements(user_id, cache_buster)
+# Load data
+df = load_and_parse_statements(user_id, st.session_state.cache_buster)
 
 if df.empty:
-    st.info("👋 No statements found yet. Upload some using the sidebar to see your dashboard!")
+    st.info("👋 No statements found. Upload files in the sidebar!")
     st.stop()
-else:
-    st.success(f"✅ Loaded {len(df)} transactions from {len(get_all_statement_paths(user_id))} statements")
+
+st.success(f"✅ Dashboard: {len(df)} transactions loaded")
 
 # === REVIEW QUEUE ===
 uncategorized = df[df['Category'] == 'Uncategorized'].copy()
 if not uncategorized.empty:
-    st.warning(f"⚠️ {len(uncategorized)} uncategorized transactions to review.")
+    st.warning(f"⚠️ {len(uncategorized)} uncategorized transactions")
     with st.expander("📝 Review & Categorize", expanded=True):
         options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
         edited_df = st.data_editor(
             uncategorized[['Date', 'Description', 'Amount', 'Category']],
             column_config={"Category": st.column_config.SelectboxColumn("Assign Category", options=options)},
-            hide_index=True, use_container_width=True, key="editor"
+            use_container_width=True
         )
-        if st.button("💾 Save Rules", use_container_width=True):
+        if st.button("💾 Save Rules"):
             for _, row in edited_df.iterrows():
                 if row['Category'] not in ['Uncategorized', 'Ignore']:
                     save_learned_rule(row['Description'], row['Category'], user_id=user_id)
-            st.success("✅ Rules updated!")
             st.cache_data.clear()
             st.rerun()
 
-# === DASHBOARD METRICS & CHARTS ===
+# === DASHBOARD ===
 st.divider()
-st.markdown("### 📈 Dashboard Snapshot")
+st.markdown("### 📈 Dashboard")
 
 col1, col2, col3 = st.columns(3)
 latest_month = df['Date'].dt.to_period('M').max()
@@ -241,17 +237,15 @@ spend = month_df[(month_df['Category'] != 'Savings') & (month_df['Amount'] < 0)]
 saved = month_df[month_df['Category'] == 'Savings']['Amount'].sum() * -1
 
 col1.metric("📅 Latest Month", str(latest_month))
-col2.metric("💸 Total Spent", f"£{spend:,.0f}")
-col3.metric("💰 Net Saved", f"£{saved:,.0f}")
+col2.metric("💸 Spent", f"£{spend:,.0f}")
+col3.metric("💰 Saved", f"£{saved:,.0f}")
 
-# Charts row
-col_chart1, col_chart2 = st.columns([1, 2])
-with col_chart1:
+col1, col2 = st.columns([1, 2])
+with col1:
     st.plotly_chart(create_spending_pie_chart(df), use_container_width=True)
-with col_chart2:
+with col2:
     st.plotly_chart(create_monthly_trend_line(df), use_container_width=True)
     st.plotly_chart(create_balance_trend_line(df), use_container_width=True)
 
-# Raw data expander
-with st.expander("📋 View All Transactions", expanded=False):
+with st.expander("📋 All Transactions"):
     st.dataframe(df, use_container_width=True)
