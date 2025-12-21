@@ -120,8 +120,9 @@ with st.sidebar:
     )
 
     # Handle uploads ONLY when files change AND not already processing
-    if uploaded_files and not st.session_state.upload_complete:
-        if st.button("🚀 Process Files", use_container_width=True, key="process_btn"):
+    if uploaded_files and not st.session_state.get("upload_complete", False):
+        col1, col2 = st.columns([3, 1])
+        if col2.button("🚀 Process Files", use_container_width=True, key="process_btn"):
             with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
                 success_count = 0
                 existing_files = set(get_all_statement_paths(user_id))
@@ -138,11 +139,14 @@ with st.sidebar:
                         save_uploaded_file(f, user_id=user_id)
                         success_count += 1
                         existing_files.add(filename)
+                        print(f"SUCCESS: Uploaded {f.name}")
                     except Exception as e:
                         st.sidebar.error(f"❌ {f.name}: {e}")
+                        print(f"ERROR: {e}")
 
                 if success_count > 0:
                     st.session_state.upload_complete = True
+                    st.session_state.cache_buster = st.session_state.get("cache_buster", 0) + 1
                     st.cache_data.clear()
                     st.rerun()
                 else:
@@ -150,10 +154,12 @@ with st.sidebar:
 
 
 # === DATA LOADING & PARSING ===
-@st.cache_data(ttl=300, show_spinner=False)
-def load_and_parse_statements(_user_id):
+@st.cache_data(ttl=60)  # Short TTL + manual invalidation
+def load_and_parse_statements(_user_id, _cache_buster):
     """Load and parse all user statements from B2 storage."""
     paths = get_all_statement_paths(user_id=_user_id)
+    print(f"DEBUG: Loading {len(paths)} paths for user {_user_id}")
+
     if not paths:
         return pd.DataFrame()
 
@@ -164,6 +170,7 @@ def load_and_parse_statements(_user_id):
     for storage_path in paths:
         content = download_statement(storage_path)
         if not content:
+            print(f"DEBUG: Empty content for {storage_path}")
             continue
 
         file_name = storage_path.split("/")[-1]
@@ -178,23 +185,31 @@ def load_and_parse_statements(_user_id):
                 continue
 
             if not df_file.empty:
+                print(f"DEBUG: Parsed {len(df_file)} rows from {file_name}")
                 all_dfs.append(df_file)
         except Exception as e:
             print(f"Failed to parse {file_name}: {e}")
 
     if not all_dfs:
+        print("DEBUG: No dataframes parsed")
         return pd.DataFrame()
 
     df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
+    print(f"DEBUG: Combined {len(df)} total transactions")
     return df.sort_values("Date", ascending=False)
 
 
-# Load data
-df = load_and_parse_statements(user_id)
+# Add cache buster that changes after upload
+cache_buster = st.session_state.get("cache_buster", 0)
+
+# Load data with cache buster
+df = load_and_parse_statements(user_id, cache_buster)
 
 if df.empty:
     st.info("👋 No statements found yet. Upload some using the sidebar to see your dashboard!")
     st.stop()
+else:
+    st.success(f"✅ Loaded {len(df)} transactions from {len(get_all_statement_paths(user_id))} statements")
 
 # === REVIEW QUEUE ===
 uncategorized = df[df['Category'] == 'Uncategorized'].copy()
