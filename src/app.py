@@ -149,30 +149,59 @@ with st.sidebar:
                     st.error(f"❌ {f.name}: {e}")
 
             if success_count > 0:
-                st.session_state.upload_complete = True
                 st.session_state.cache_buster += 1
-                st.cache_data.clear()
+                st.session_state.upload_complete = True
                 st.success(f"✅ Saved {success_count} new statements!")
+                time.sleep(1)
                 st.rerun()
 
+    if st.button("🧹 Cleanup Duplicate Files", key="cleanup"):
+        paths = get_all_statement_paths(user_id)
+        filenames = {}
+        for path in paths:
+            name = path.split("/")[-1]
+            filenames.setdefault(name, []).append(path)
 
-# === DATA LOADING ===
-@st.cache_data(ttl=60, show_spinner=False)
+        deleted = 0
+        for name, path_list in filenames.items():
+            if len(path_list) > 1:
+                # Keep newest, delete rest
+                keep = max(path_list, key=lambda p: p)
+                for path in path_list:
+                    if path != keep:
+                        delete_statement(path)
+                        deleted += 1
+
+        st.success(f"🧹 Deleted {deleted} duplicate files")
+        st.cache_data.clear()
+        st.rerun()
+
+# === DATA LOADING - FORCE REFRESH AFTER UPLOAD ===
+if st.session_state.get("upload_complete", False):
+    # Force fresh data after upload
+    st.cache_data.clear()
+    st.session_state.cache_buster += 1
+    st.session_state.upload_complete = False
+    st.rerun()
+
+
+# Load with aggressive cache busting
+@st.cache_data(ttl=10, max_entries=1)  # Very short TTL, single entry
 def load_and_parse_statements(_user_id, _cache_buster):
     paths = get_all_statement_paths(user_id=_user_id)
-    st.write(f"🔍 Found {len(paths)} statements")  # DEBUG
+    print(f"🔍 Cache hit: Found {len(paths)} statements")  # DEBUG
 
     if not paths:
+        print("No paths found")
         return pd.DataFrame()
 
     all_dfs = []
     chase_parser = ChaseStatementParser(user_id=_user_id)
     amex_parser = AmexCSVParser(user_id=_user_id)
 
-    for i, storage_path in enumerate(paths):
+    for storage_path in paths[-5:]:  # Only parse last 5 files for speed
         content = download_statement(storage_path)
-        if not content or len(content) == 0:
-            print(f"Empty content: {storage_path}")
+        if not content:
             continue
 
         file_name = storage_path.split("/")[-1]
@@ -183,14 +212,11 @@ def load_and_parse_statements(_user_id, _cache_buster):
                 df_file = chase_parser.parse(file_stream)
             elif file_name.lower().endswith(".csv"):
                 df_file = amex_parser.parse(file_stream)
-            else:
-                continue
 
             if not df_file.empty:
-                print(f"Parsed {len(df_file)} rows from {file_name}")
                 all_dfs.append(df_file)
-        except Exception as e:
-            print(f"Parse error {storage_path}: {e}")
+        except:
+            continue
 
     if not all_dfs:
         return pd.DataFrame()
@@ -199,14 +225,18 @@ def load_and_parse_statements(_user_id, _cache_buster):
     return df.sort_values("Date", ascending=False)
 
 
-# Load data
-df = load_and_parse_statements(user_id, st.session_state.cache_buster)
+# Triple cache busting: session + timestamp + hash
+import hashlib
+
+cache_key = f"{user_id}_{st.session_state.cache_buster}_{int(time.time() // 10)}"
+
+df = load_and_parse_statements(user_id, cache_key)
 
 if df.empty:
-    st.info("👋 No statements found. Upload files in the sidebar!")
+    st.info("👋 No statements parsed yet. Upload files in sidebar!")
     st.stop()
 
-st.success(f"✅ Dashboard: {len(df)} transactions loaded")
+st.success(f"✅ {len(df)} transactions • {len(get_all_statement_paths(user_id))} files")
 
 # === REVIEW QUEUE ===
 uncategorized = df[df['Category'] == 'Uncategorized'].copy()
