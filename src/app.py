@@ -88,6 +88,10 @@ if not user:
 user_id = user.id
 user_email = user.email
 
+# === UPLOAD STATE MANAGEMENT ===
+if "upload_complete" not in st.session_state:
+    st.session_state.upload_complete = False
+
 # === MAIN DASHBOARD ===
 st.title("📊 Personal Finance Dashboard")
 st.sidebar.markdown(f"👤 **{user_email}**")
@@ -101,35 +105,52 @@ with st.sidebar:
 
     st.divider()
     st.header("📁 Upload Statements")
+
+    # Show upload success message
+    if st.session_state.upload_complete:
+        st.success("✅ Files uploaded successfully!")
+        st.info("Dashboard refreshed with new data.")
+        st.session_state.upload_complete = False  # Reset flag
+
     uploaded_files = st.file_uploader(
         "Upload Statements (PDF or CSV)",
         type=["pdf", "csv"],
         accept_multiple_files=True,
+        key="file_uploader",  # Unique key prevents re-trigger
     )
 
-    # Handle uploads immediately
-    if uploaded_files:
-        with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
-            success_count = 0
-            for f in uploaded_files:
-                try:
-                    storage_path = save_uploaded_file(f, user_id=user_id)
-                    success_count += 1
-                except Exception as e:
-                    st.sidebar.error(f"Failed to save {f.name}: {e}")
+    # Handle uploads ONLY when files change AND not already processing
+    if uploaded_files and not st.session_state.upload_complete:
+        if st.button("🚀 Process Files", use_container_width=True, key="process_btn"):
+            with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
+                success_count = 0
+                existing_files = set(get_all_statement_paths(user_id))
 
-            if success_count > 0:
-                st.sidebar.success(f"✅ Saved {success_count} new statement(s)!")
-                st.sidebar.info("Charts will refresh automatically.")
-                # Clear relevant caches and rerun to show new data
-                st.cache_data.clear()
-                st.rerun()
-            else:
-                st.sidebar.error("No files were saved.")
+                for f in uploaded_files:
+                    filename = f"{user_id}/{f.name}"
+
+                    # Skip duplicates
+                    if filename in existing_files:
+                        st.sidebar.warning(f"⏭️ {f.name} already exists")
+                        continue
+
+                    try:
+                        save_uploaded_file(f, user_id=user_id)
+                        success_count += 1
+                        existing_files.add(filename)
+                    except Exception as e:
+                        st.sidebar.error(f"❌ {f.name}: {e}")
+
+                if success_count > 0:
+                    st.session_state.upload_complete = True
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    st.sidebar.warning("No new files to upload.")
 
 
 # === DATA LOADING & PARSING ===
-@st.cache_data(ttl=300)  # Cache for 5 minutes
+@st.cache_data(ttl=300, show_spinner=False)
 def load_and_parse_statements(_user_id):
     """Load and parse all user statements from B2 storage."""
     paths = get_all_statement_paths(user_id=_user_id)
@@ -186,7 +207,7 @@ if not uncategorized.empty:
             column_config={"Category": st.column_config.SelectboxColumn("Assign Category", options=options)},
             hide_index=True, use_container_width=True, key="editor"
         )
-        if st.button("💾 Save Rules", use_container_width=True, key="btn_update"):
+        if st.button("💾 Save Rules", use_container_width=True):
             for _, row in edited_df.iterrows():
                 if row['Category'] not in ['Uncategorized', 'Ignore']:
                     save_learned_rule(row['Description'], row['Category'], user_id=user_id)

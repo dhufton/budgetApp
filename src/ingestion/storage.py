@@ -76,3 +76,18 @@ def delete_statement(storage_path: str):
         delete_statement(storage_path)
     except Exception as e:
         print(f"Failed to delete {storage_path}: {e}")
+
+
+# In storage.py - add this function
+def cleanup_duplicates(user_id: str):
+    """Keep only latest version of each filename."""
+    paths = get_all_statement_paths(user_id)
+    filenames = {}
+    for path in paths:
+        name = path.split("/")[-1]
+        filenames[name] = path  # Latest wins
+
+    for name, keep_path in filenames.items():
+        for path in paths:
+            if path != keep_path and path.split("/")[-1] == name:
+                delete_statement(path)
