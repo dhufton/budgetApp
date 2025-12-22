@@ -1,9 +1,10 @@
 # budgetApp/src/app.py
-import streamlit as st
-import pandas as pd
 import time
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
+
+import pandas as pd
+import streamlit as st
 
 from supabase_client import supabase
 from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement
@@ -19,6 +20,8 @@ from config import CATEGORY_RULES
 st.set_page_config(page_title="Budget Tracker", layout="wide")
 
 
+# ---------- Auth helpers ----------
+
 def get_current_user():
     return st.session_state.get("user")
 
@@ -33,13 +36,7 @@ def logout():
     st.session_state.pop("supabase_session", None)
 
 
-# Initialize session state
-if "upload_complete" not in st.session_state:
-    st.session_state.upload_complete = False
-if "cache_buster" not in st.session_state:
-    st.session_state.cache_buster = 0
-
-# Hydrate supabase session
+# Hydrate supabase session on rerun if we have it
 if "supabase_session" in st.session_state:
     try:
         session = st.session_state["supabase_session"]
@@ -63,6 +60,8 @@ def auth_view():
                     st.success(f"Welcome back, {email}!")
                     time.sleep(1)
                     st.rerun()
+                else:
+                    st.error("Login failed.")
             except Exception as e:
                 st.error(f"Login error: {e}")
 
@@ -79,9 +78,13 @@ def auth_view():
                         "username": username_r or email_r.split("@")[0],
                     }).execute()
                     st.success("Account created. Please confirm your email and log in.")
+                else:
+                    st.error("Registration failed.")
             except Exception as e:
                 st.error(f"Registration error: {e}")
 
+
+# ---------- Auth gate ----------
 
 user = get_current_user()
 if not user:
@@ -91,11 +94,15 @@ if not user:
 user_id = user.id
 user_email = user.email
 
-# === MAIN DASHBOARD ===
+
+# ---------- Main layout ----------
+
 st.title("📊 Personal Finance Dashboard")
 st.sidebar.markdown(f"👤 **{user_email}**")
 
-# Sidebar
+
+# ---------- Sidebar: logout + upload ----------
+
 with st.sidebar:
     if st.button("🚪 Logout", use_container_width=True):
         supabase.auth.sign_out()
@@ -105,101 +112,74 @@ with st.sidebar:
     st.divider()
     st.header("📁 Upload Statements")
 
-    # Success message
-    if st.session_state.upload_complete:
-        st.success("✅ Files uploaded successfully!")
-        st.rerun()  # Refresh dashboard immediately
-
-    # File uploader
     uploaded_files = st.file_uploader(
         "Upload Statements (PDF or CSV)",
         type=["pdf", "csv"],
         accept_multiple_files=True,
-        key="file_uploader_unique"
+        key="file_uploader_unique",
     )
 
-    # Process button (outside columns to avoid sidebar bug)
-    if uploaded_files and st.button("🚀 Process Files", use_container_width=True):
+    if uploaded_files and st.button("🚀 Process Files", use_container_width=True, key="process_btn"):
         with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
             success_count = 0
-            existing_files = set(get_all_statement_paths(user_id))
+            existing_paths = set(get_all_statement_paths(user_id))
 
             for f in uploaded_files:
-                filename = f"{user_id}/{f.name}"
+                storage_path = f"{user_id}/{f.name}"
 
-                if filename in existing_files:
-                    st.warning(f"⏭️ {f.name} already exists")
+                # Skip duplicates based on storage path
+                if storage_path in existing_paths:
+                    st.warning(f"⏭️ {f.name} already exists, skipping")
                     continue
 
                 try:
-                    # 1. Upload to B2
-                    storage_path = save_uploaded_file(f, user_id=user_id)
+                    # 1) Upload file to B2
+                    saved_path = save_uploaded_file(f, user_id=user_id)
 
-                    # 2. Save metadata to Supabase (CRITICAL!)
-                    supabase.table("statements").insert({
-                        "user_id": user_id,
-                        "storage_key": storage_path,
-                        "file_name": f.name,
-                        "uploaded_at": datetime.utcnow().isoformat()
-                    }).execute()
+                    # 2) Ensure user row exists in public.users
+                    user_row = supabase.table("users").select("id").eq("id", user_id).execute()
+                    if not user_row.supabase.table("users").insert({
+                            "id": user_id,
+                            "username": user_email.split("@")[0],
+                            "email": user_email,
+                        }).execute():
+
+                        # 3) Insert metadata into statements table
+                        supabase.table("statements").insert({
+                            "user_id": user_id,
+                            "storage_key": saved_path,
+                            "file_name": f.name,
+                            "uploaded_at": datetime.utcnow().isoformat(),
+                        }).execute()
 
                     success_count += 1
-                    print(f"SUCCESS: {f.name} -> {storage_path}")
+                    existing_paths.add(storage_path)
                 except Exception as e:
                     st.error(f"❌ {f.name}: {e}")
 
             if success_count > 0:
-                st.session_state.cache_buster += 1
-                st.session_state.upload_complete = True
-                st.success(f"✅ Saved {success_count} new statements!")
-                time.sleep(1)
+                st.success(f"✅ Saved {success_count} new statement(s)!")
+                # Invalidate cached parsed data and rerun once
+                st.cache_data.clear()
                 st.rerun()
-
-    if st.button("🧹 Cleanup Duplicate Files", key="cleanup"):
-        paths = get_all_statement_paths(user_id)
-        filenames = {}
-        for path in paths:
-            name = path.split("/")[-1]
-            filenames.setdefault(name, []).append(path)
-
-        deleted = 0
-        for name, path_list in filenames.items():
-            if len(path_list) > 1:
-                # Keep newest, delete rest
-                keep = max(path_list, key=lambda p: p)
-                for path in path_list:
-                    if path != keep:
-                        delete_statement(path)
-                        deleted += 1
-
-        st.success(f"🧹 Deleted {deleted} duplicate files")
-        st.cache_data.clear()
-        st.rerun()
-
-# === DATA LOADING - FORCE REFRESH AFTER UPLOAD ===
-if st.session_state.get("upload_complete", False):
-    # Force fresh data after upload
-    st.cache_data.clear()
-    st.session_state.cache_buster += 1
-    st.session_state.upload_complete = False
-    st.rerun()
+            else:
+                st.info("No new files uploaded.")
 
 
-# Load with aggressive cache busting
-@st.cache_data(ttl=10, max_entries=1)  # Very short TTL, single entry
-def load_and_parse_statements(_user_id, _cache_buster):
+# ---------- Data loading & parsing ----------
+
+@st.cache_data(ttl=300, show_spinner=True)
+def load_and_parse_statements(_user_id: str) -> pd.DataFrame:
+    """Load and parse all user statements from storage based on Supabase metadata."""
     paths = get_all_statement_paths(user_id=_user_id)
-    print(f"🔍 Cache hit: Found {len(paths)} statements")  # DEBUG
-
     if not paths:
-        print("No paths found")
         return pd.DataFrame()
 
     all_dfs = []
     chase_parser = ChaseStatementParser(user_id=_user_id)
     amex_parser = AmexCSVParser(user_id=_user_id)
 
-    for storage_path in paths[-5:]:  # Only parse last 5 files for speed
+    for storage_path in paths:
         content = download_statement(storage_path)
         if not content:
             continue
@@ -212,11 +192,14 @@ def load_and_parse_statements(_user_id, _cache_buster):
                 df_file = chase_parser.parse(file_stream)
             elif file_name.lower().endswith(".csv"):
                 df_file = amex_parser.parse(file_stream)
+            else:
+                continue
 
             if not df_file.empty:
                 all_dfs.append(df_file)
-        except:
-            continue
+        except Exception as e:
+            # Log parse errors to stdout; avoid breaking the whole load
+            print(f"Failed to parse {file_name}: {e}")
 
     if not all_dfs:
         return pd.DataFrame()
@@ -225,57 +208,60 @@ def load_and_parse_statements(_user_id, _cache_buster):
     return df.sort_values("Date", ascending=False)
 
 
-# Triple cache busting: session + timestamp + hash
-import hashlib
-
-cache_key = f"{user_id}_{st.session_state.cache_buster}_{int(time.time() // 10)}"
-
-df = load_and_parse_statements(user_id, cache_key)
+df = load_and_parse_statements(user_id)
 
 if df.empty:
-    st.info("👋 No statements parsed yet. Upload files in sidebar!")
+    st.info("👋 No statements found yet. Upload some using the sidebar to see your dashboard.")
     st.stop()
 
-st.success(f"✅ {len(df)} transactions • {len(get_all_statement_paths(user_id))} files")
 
-# === REVIEW QUEUE ===
-uncategorized = df[df['Category'] == 'Uncategorized'].copy()
+# ---------- Review queue ----------
+
+uncategorized = df[df["Category"] == "Uncategorized"].copy()
 if not uncategorized.empty:
-    st.warning(f"⚠️ {len(uncategorized)} uncategorized transactions")
+    st.warning(f"⚠️ {len(uncategorized)} uncategorized transactions to review.")
     with st.expander("📝 Review & Categorize", expanded=True):
         options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
         edited_df = st.data_editor(
-            uncategorized[['Date', 'Description', 'Amount', 'Category']],
-            column_config={"Category": st.column_config.SelectboxColumn("Assign Category", options=options)},
-            use_container_width=True
+            uncategorized[["Date", "Description", "Amount", "Category"]],
+            column_config={
+                "Category": st.column_config.SelectboxColumn("Assign Category", options=options)
+            },
+            hide_index=True,
+            use_container_width=True,
+            key="editor",
         )
-        if st.button("💾 Save Rules"):
+        if st.button("💾 Save Rules", use_container_width=True, key="btn_save_rules"):
             for _, row in edited_df.iterrows():
-                if row['Category'] not in ['Uncategorized', 'Ignore']:
-                    save_learned_rule(row['Description'], row['Category'], user_id=user_id)
+                if row["Category"] not in ["Uncategorized", "Ignore"]:
+                    save_learned_rule(row["Description"], row["Category"], user_id=user_id)
+            st.success("✅ Rules updated! Reloading with new categories...")
             st.cache_data.clear()
             st.rerun()
 
-# === DASHBOARD ===
+
+# ---------- Dashboard metrics & charts ----------
+
 st.divider()
-st.markdown("### 📈 Dashboard")
+st.markdown("### 📈 Dashboard Snapshot")
 
 col1, col2, col3 = st.columns(3)
-latest_month = df['Date'].dt.to_period('M').max()
-month_df = df[df['Date'].dt.to_period('M') == latest_month]
-spend = month_df[(month_df['Category'] != 'Savings') & (month_df['Amount'] < 0)]['Amount'].sum() * -1
-saved = month_df[month_df['Category'] == 'Savings']['Amount'].sum() * -1
+latest_month = df["Date"].dt.to_period("M").max()
+month_df = df[df["Date"].dt.to_period("M") == latest_month]
+
+spend = month_df[(month_df["Category"] != "Savings") & (month_df["Amount"] < 0)]["Amount"].sum() * -1
+saved = month_df[month_df["Category"] == "Savings"]["Amount"].sum() * -1
 
 col1.metric("📅 Latest Month", str(latest_month))
-col2.metric("💸 Spent", f"£{spend:,.0f}")
-col3.metric("💰 Saved", f"£{saved:,.0f}")
+col2.metric("💸 Total Spent", f"£{spend:,.0f}")
+col3.metric("💰 Net Saved", f"£{saved:,.0f}")
 
-col1, col2 = st.columns([1, 2])
-with col1:
+col_chart1, col_chart2 = st.columns([1, 2])
+with col_chart1:
     st.plotly_chart(create_spending_pie_chart(df), use_container_width=True)
-with col2:
+with col_chart2:
     st.plotly_chart(create_monthly_trend_line(df), use_container_width=True)
     st.plotly_chart(create_balance_trend_line(df), use_container_width=True)
 
-with st.expander("📋 All Transactions"):
+with st.expander("📋 View All Transactions", expanded=False):
     st.dataframe(df, use_container_width=True)
