@@ -95,11 +95,72 @@ user_id = user.id
 user_email = user.email
 
 
+# ---------- OPTIMIZED DATA LOADING ----------
+
+@st.cache_data(ttl=1800)  # 30 minutes
+def get_cached_transactions(_user_id: str) -> pd.DataFrame:
+    """Load cached transactions from Supabase (FAST) or parse files (SLOW, cached)."""
+    # 1. Try cached transactions first
+    res = supabase.table("transactions") \
+        .select("*") \
+        .eq("user_id", _user_id) \
+        .order("date", desc=True) \
+        .execute()
+
+    if res:
+        df = pd.DataFrame(res.data)
+        if not df.empty:
+            print(f"✅ Loaded {len(df):,} cached transactions")
+            return df
+
+    # 2. Fallback: parse from files (will cache next time)
+    print("⚠️ No cached transactions, parsing from files...")
+    return load_and_parse_from_files(_user_id)
+
+
+@st.cache_data(ttl=1800)
+def load_and_parse_from_files(_user_id: str) -> pd.DataFrame:
+    """Parse raw files (used as fallback, results cached in transactions table)."""
+    paths = get_all_statement_paths(user_id=_user_id)
+    if not paths:
+        return pd.DataFrame()
+
+    all_dfs = []
+    chase_parser = ChaseStatementParser(user_id=_user_id)
+    amex_parser = AmexCSVParser(user_id=_user_id)
+
+    for storage_path in paths[-10:]:  # Only last 10 files for speed
+        content = download_statement(storage_path)
+        if not content:
+            continue
+
+        file_name = storage_path.split("/")[-1]
+        file_stream = BytesIO(content)
+
+        try:
+            if file_name.lower().endswith(".pdf"):
+                df_file = chase_parser.parse(file_stream)
+            elif file_name.lower().endswith(".csv"):
+                df_file = amex_parser.parse(file_stream)
+            else:
+                continue
+
+            if not df_file.empty:
+                all_dfs.append(df_file)
+        except Exception as e:
+            print(f"Parse error {file_name}: {e}")
+
+    if not all_dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
+    return df.sort_values("Date", ascending=False)
+
+
 # ---------- Main layout ----------
 
 st.title("📊 Personal Finance Dashboard")
 st.sidebar.markdown(f"👤 **{user_email}**")
-
 
 # ---------- Sidebar: logout + upload ----------
 
@@ -127,93 +188,71 @@ with st.sidebar:
             for f in uploaded_files:
                 storage_path = f"{user_id}/{f.name}"
 
-                # Skip duplicates based on storage path
                 if storage_path in existing_paths:
-                    st.warning(f"⏭️ {f.name} already exists, skipping")
+                    st.warning(f"⏭️ {f.name} already exists")
                     continue
 
                 try:
-                    # 1) Upload file to B2
+                    # 1. Upload to B2
                     saved_path = save_uploaded_file(f, user_id=user_id)
 
-                    # 2) Ensure user row exists in public.users
+                    # 2. Ensure user row exists
                     user_row = supabase.table("users").select("id").eq("id", user_id).execute()
-                    if not user_row.supabase.table("users").insert({
+                    if not user_row:
+                        supabase.table("users").insert({
                             "id": user_id,
                             "username": user_email.split("@")[0],
                             "email": user_email,
-                        }).execute():
-
-                        # 3) Insert metadata into statements table
-                        supabase.table("statements").insert({
-                            "user_id": user_id,
-                            "storage_key": saved_path,
-                            "file_name": f.name,
-                            "uploaded_at": datetime.utcnow().isoformat(),
                         }).execute()
 
+                    # 3. Parse and cache transactions
+                    content = f.getvalue()
+                    file_stream = BytesIO(content)
+
+                    if f.name.lower().endswith(".pdf"):
+                        df_transactions = ChaseStatementParser(user_id).parse(file_stream)
+                    else:  # csv
+                        df_transactions = AmexCSVParser(user_id).parse(file_stream)
+
+                    if not df_transactions.empty:
+                        # Add metadata and save to transactions table (FAST queries)
+                        df_transactions["user_id"] = user_id
+                        df_transactions["statement_path"] = saved_path
+                        df_transactions["parsed_at"] = datetime.utcnow().isoformat()
+
+                        # Batch insert
+                        records = df_transactions.to_dict("records")
+                        supabase.table("transactions").insert(records).execute()
+                        print(f"✅ Cached {len(df_transactions)} transactions")
+
+                    # 4. Save statement metadata
+                    supabase.table("statements").insert({
+                        "user_id": user_id,
+                        "storage_key": saved_path,
+                        "file_name": f.name,
+                        "uploaded_at": datetime.utcnow().isoformat(),
+                    }).execute()
+
                     success_count += 1
-                    existing_paths.add(storage_path)
                 except Exception as e:
                     st.error(f"❌ {f.name}: {e}")
 
             if success_count > 0:
                 st.success(f"✅ Saved {success_count} new statement(s)!")
-                # Invalidate cached parsed data and rerun once
                 st.cache_data.clear()
                 st.rerun()
             else:
                 st.info("No new files uploaded.")
 
+# ---------- Load data ----------
 
-# ---------- Data loading & parsing ----------
-
-@st.cache_data(ttl=300, show_spinner=True)
-def load_and_parse_statements(_user_id: str) -> pd.DataFrame:
-    """Load and parse all user statements from storage based on Supabase metadata."""
-    paths = get_all_statement_paths(user_id=_user_id)
-    if not paths:
-        return pd.DataFrame()
-
-    all_dfs = []
-    chase_parser = ChaseStatementParser(user_id=_user_id)
-    amex_parser = AmexCSVParser(user_id=_user_id)
-
-    for storage_path in paths:
-        content = download_statement(storage_path)
-        if not content:
-            continue
-
-        file_name = storage_path.split("/")[-1]
-        file_stream = BytesIO(content)
-
-        try:
-            if file_name.lower().endswith(".pdf"):
-                df_file = chase_parser.parse(file_stream)
-            elif file_name.lower().endswith(".csv"):
-                df_file = amex_parser.parse(file_stream)
-            else:
-                continue
-
-            if not df_file.empty:
-                all_dfs.append(df_file)
-        except Exception as e:
-            # Log parse errors to stdout; avoid breaking the whole load
-            print(f"Failed to parse {file_name}: {e}")
-
-    if not all_dfs:
-        return pd.DataFrame()
-
-    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
-    return df.sort_values("Date", ascending=False)
-
-
-df = load_and_parse_statements(user_id)
+df = get_cached_transactions(user_id)
 
 if df.empty:
-    st.info("👋 No statements found yet. Upload some using the sidebar to see your dashboard.")
+    st.info("👋 No transactions found yet. Upload statements using the sidebar!")
     st.stop()
 
+st.success(f"✅ Loaded {len(df):,} transactions")
 
 # ---------- Review queue ----------
 
@@ -231,16 +270,15 @@ if not uncategorized.empty:
             use_container_width=True,
             key="editor",
         )
-        if st.button("💾 Save Rules", use_container_width=True, key="btn_save_rules"):
+        if st.button("💾 Save Rules", use_container_width=True):
             for _, row in edited_df.iterrows():
                 if row["Category"] not in ["Uncategorized", "Ignore"]:
                     save_learned_rule(row["Description"], row["Category"], user_id=user_id)
-            st.success("✅ Rules updated! Reloading with new categories...")
+            st.success("✅ Rules updated!")
             st.cache_data.clear()
             st.rerun()
 
-
-# ---------- Dashboard metrics & charts ----------
+# ---------- Dashboard ----------
 
 st.divider()
 st.markdown("### 📈 Dashboard Snapshot")
@@ -256,12 +294,14 @@ col1.metric("📅 Latest Month", str(latest_month))
 col2.metric("💸 Total Spent", f"£{spend:,.0f}")
 col3.metric("💰 Net Saved", f"£{saved:,.0f}")
 
+# Charts (use sampled data for speed)
+df_chart = df.sample(min(1000, len(df))) if len(df) > 1000 else df
 col_chart1, col_chart2 = st.columns([1, 2])
 with col_chart1:
-    st.plotly_chart(create_spending_pie_chart(df), use_container_width=True)
+    st.plotly_chart(create_spending_pie_chart(df_chart), use_container_width=True)
 with col_chart2:
-    st.plotly_chart(create_monthly_trend_line(df), use_container_width=True)
-    st.plotly_chart(create_balance_trend_line(df), use_container_width=True)
+    st.plotly_chart(create_monthly_trend_line(df_chart), use_container_width=True)
+    st.plotly_chart(create_balance_trend_line(df_chart), use_container_width=True)
 
 with st.expander("📋 View All Transactions", expanded=False):
     st.dataframe(df, use_container_width=True)
