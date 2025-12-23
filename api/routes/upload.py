@@ -16,10 +16,11 @@ from api.auth import get_current_user
 
 router = APIRouter()
 
+
 @router.post("/upload")
 async def upload_statement(
-    file: UploadFile = File(...),
-    user_id: str = Depends(get_current_user)
+        file: UploadFile = File(...),
+        user_id: str = Depends(get_current_user)
 ):
     try:
         print(f"[UPLOAD] user={user_id}, filename={file.filename}")
@@ -71,8 +72,8 @@ async def upload_statement(
                 {"id": user_id, "username": "user"}
             ).execute()
 
-        # Insert statement metadata (without transactions_count)
-        supabase.table("statements").insert(
+        # Insert statement metadata
+        statement_result = supabase.table("statements").insert(
             {
                 "user_id": user_id,
                 "storage_key": saved_path,
@@ -80,6 +81,27 @@ async def upload_statement(
                 "uploaded_at": datetime.utcnow().isoformat(),
             }
         ).execute()
+
+        statement_id = statement_result.data[0]["id"] if statement_result.data else None
+        print(f"[UPLOAD] created statement record: {statement_id}")
+
+        # **NEW: Store parsed transactions in database**
+        transactions_to_insert = []
+        for _, row in df.iterrows():
+            transactions_to_insert.append({
+                "user_id": user_id,
+                "statement_id": statement_id,
+                "date": row["Date"].strftime('%Y-%m-%d') if hasattr(row["Date"], 'strftime') else str(row["Date"]),
+                "description": str(row["Description"]),
+                "amount": float(row["Amount"]),
+                "category": str(row.get("Category", "Uncategorized")),
+            })
+
+        # Batch insert transactions
+        if transactions_to_insert:
+            print(f"[UPLOAD] inserting {len(transactions_to_insert)} transactions into database")
+            supabase.table("transactions").insert(transactions_to_insert).execute()
+            print("[UPLOAD] transactions stored in database")
 
         print("[UPLOAD] completed successfully")
 
