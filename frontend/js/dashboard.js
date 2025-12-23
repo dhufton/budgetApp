@@ -3,7 +3,7 @@ let allTransactions = [];
 let isLoading = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = await checkAuth();
+    const token = await window.checkAuth();  // ← Add window.
     if (!token) {
         console.error('No valid auth, redirecting');
         return;
@@ -17,6 +17,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadDashboard();
     showLoading(false);
 });
+
+window.uploadFiles = async function() {
+    const input = document.getElementById('fileInput');
+    const files = input.files;
+
+    if (files.length === 0) {
+        alert('Please select files to upload');
+        return;
+    }
+
+    const status = document.getElementById('uploadStatus');
+    status.textContent = 'Uploading...';
+    status.className = 'mt-2 text-sm text-blue-600';
+
+    let successCount = 0;
+
+    for (const file of files) {
+        try {
+            const result = await uploadFile(file);
+            if (result.success) {
+                successCount++;
+                status.textContent = `✅ Uploaded ${successCount}/${files.length} files`;
+                status.className = 'mt-2 text-sm text-green-600';
+            } else {
+                status.textContent = `❌ Failed: ${result.message}`;
+                status.className = 'mt-2 text-sm text-red-600';
+            }
+        } catch (error) {
+            status.textContent = `❌ Failed: ${error.message}`;
+            status.className = 'mt-2 text-sm text-red-600';
+        }
+    }
+
+    // Clear file input
+    input.value = '';
+
+    // Reload dashboard after 1 second
+    if (successCount > 0) {
+        status.textContent = `✅ Successfully uploaded ${successCount} file(s). Refreshing...`;
+        setTimeout(async () => {
+            showLoading(true);
+            await loadDashboard();
+            showLoading(false);
+        }, 1000);
+    }
+};
 
 function showLoading(loading) {
     isLoading = loading;
@@ -106,7 +152,7 @@ function showErrorState(message) {
                 </div>
                 <p class="text-red-600 font-medium mb-2">Failed to load data</p>
                 <p class="text-gray-500 text-sm">${message}</p>
-                <button onclick="loadDashboard()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <button onclick="location.reload()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                     Retry
                 </button>
             </td>
@@ -222,50 +268,4 @@ function renderTransactionsTable() {
     `).join('');
 
     tbody.innerHTML = html;
-}
-
-async function uploadFiles() {
-    const input = document.getElementById('fileInput');
-    const files = input.files;
-
-    if (files.length === 0) {
-        alert('Please select files to upload');
-        return;
-    }
-
-    const status = document.getElementById('uploadStatus');
-    status.textContent = 'Uploading...';
-    status.className = 'mt-2 text-sm text-blue-600';
-
-    let successCount = 0;
-
-    for (const file of files) {
-        try {
-            const result = await uploadFile(file);
-            if (result.success) {
-                successCount++;
-                status.textContent = `✅ Uploaded ${successCount}/${files.length} files`;
-                status.className = 'mt-2 text-sm text-green-600';
-            } else {
-                status.textContent = `❌ Failed: ${result.message}`;
-                status.className = 'mt-2 text-sm text-red-600';
-            }
-        } catch (error) {
-            status.textContent = `❌ Failed: ${error.message}`;
-            status.className = 'mt-2 text-sm text-red-600';
-        }
-    }
-
-    // Clear file input
-    input.value = '';
-
-    // Reload dashboard after 1 second
-    if (successCount > 0) {
-        status.textContent = `✅ Successfully uploaded ${successCount} file(s). Refreshing...`;
-        setTimeout(async () => {
-            showLoading(true);
-            await loadDashboard();
-            showLoading(false);
-        }, 1000);
-    }
 }
