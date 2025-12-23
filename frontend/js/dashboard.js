@@ -2,6 +2,74 @@
 let allTransactions = [];
 let isLoading = false;
 
+const api = {
+    baseURL: window.location.hostname === 'localhost'
+        ? 'http://localhost:8000'
+        : 'https://budget-tracker-app-n12a.onrender.com',
+    token: localStorage.getItem('access_token'),
+
+    async getTransactions() {
+        const response = await fetch(`${this.baseURL}/transactions`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Failed to fetch transactions: ${response.status}`);
+        }
+
+        return response.json();
+    },
+
+    async uploadFile(formData) {
+        const response = await fetch(`${this.baseURL}/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: formData,
+        });
+
+        // Handle 409 Conflict (duplicate file)
+        if (response.status === 409) {
+            const data = await response.json();
+            throw new Error(data.message || 'File already exists');
+        }
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+
+        return response.json();
+    }
+};
+
+let allTransactions = [];
+let isLoading = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const token = await window.checkAuth();
+    if (!token) {
+        console.error('No valid auth, redirecting');
+        return;
+    }
+
+    // Update API token
+    api.token = token;
+
+    const email = localStorage.getItem('user_email');
+    document.getElementById('userEmail').textContent = email || 'User';
+
+    // Show loading state
+    showLoading(true);
+    await loadDashboard();
+    showLoading(false);
+});
+
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
     if (!token) {
