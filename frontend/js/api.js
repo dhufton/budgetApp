@@ -121,6 +121,77 @@ const api = {
         }
     },
 
+    async addCategory(category) {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/categories`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ category })
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to add category');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to add category:', error);
+            throw error;
+        }
+    },
+
+    async deleteCategory(category) {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(category)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to delete category');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to delete category:', error);
+            throw error;
+        }
+    },
+
     async getBudgetTargets() {
         const token = localStorage.getItem('access_token');
 
@@ -155,6 +226,77 @@ const api = {
         }
     },
 
+    async setBudgetTarget(category, targetAmount) {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/budget-targets`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ category, target_amount: targetAmount })
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to set budget target');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to set budget target:', error);
+            throw error;
+        }
+    },
+
+    async deleteBudgetTarget(category) {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/budget-targets/${encodeURIComponent(category)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to delete budget target');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to delete budget target:', error);
+            throw error;
+        }
+    },
+
     async getBudgetComparison() {
         const token = localStorage.getItem('access_token');
 
@@ -185,6 +327,42 @@ const api = {
             return response.json();
         } catch (error) {
             console.error('Failed to fetch budget comparison:', error);
+            throw error;
+        }
+    },
+
+    async updateTransactionCategory(transactionId, category) {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/api/transactions/${transactionId}/category`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ category })
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to update category');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to update transaction category:', error);
             throw error;
         }
     }

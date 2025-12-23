@@ -8,7 +8,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from api.routes import transactions, upload, categories, budget
+from api.routes import transactions, upload, categories, budget, transactions
 
 app = FastAPI(title="Budget Tracker API", version="1.0.0")
 
@@ -35,6 +35,7 @@ app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(budget.router, prefix="/api", tags=["budget"])
+app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 
 
 @app.get("/api/config")

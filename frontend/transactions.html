@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions - Budget Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container dashboard">
+        <!-- Header -->
+        <div class="dashboard-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <a href="/dashboard" style="text-decoration: none; color: #667eea; font-size: 1.5rem;">←</a>
+                <h1>📊 Transactions</h1>
+            </div>
+            <div class="user-info">
+                <span class="user-email" id="userEmail">user@example.com</span>
+                <button onclick="logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+
+        <!-- Filter Section -->
+        <div class="filter-section">
+            <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                <label style="font-weight: 500; color: #374151;">Filter:</label>
+                <button onclick="filterTransactions('all')" class="filter-btn active" id="filterAll">
+                    All (<span id="countAll">0</span>)
+                </button>
+                <button onclick="filterTransactions('uncategorized')" class="filter-btn" id="filterUncategorized">
+                    Uncategorized (<span id="countUncategorized">0</span>)
+                </button>
+                <button onclick="filterTransactions('categorized')" class="filter-btn" id="filterCategorized">
+                    Categorized (<span id="countCategorized">0</span>)
+                </button>
+            </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="upload-section" style="margin-top: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">All Transactions</h2>
+                <a href="/dashboard" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem; text-decoration: none;">
+                    Back to Dashboard
+                </a>
+            </div>
+
+            <div class="transactions-table">
+                <table id="transactionsTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 12%;">Date</th>
+                            <th style="width: 40%;">Description</th>
+                            <th style="width: 25%;">Category</th>
+                            <th style="width: 15%; text-align: right;">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactionsBody">
+                        <tr>
+                            <td colspan="4" class="text-center" style="padding: 3rem; color: #6b7280;">
+                                <div class="loading" style="margin: 0 auto 0.5rem;"></div>
+                                Loading transactions...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination (optional for future) -->
+            <div id="paginationInfo" style="margin-top: 1rem; text-align: center; color: #6b7280; font-size: 0.875rem;">
+                <!-- Showing X of Y transactions -->
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/transactions.js"></script>
+</body>
+</html>
