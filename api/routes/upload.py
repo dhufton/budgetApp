@@ -57,12 +57,13 @@ async def upload_statement(
         if df.empty:
             raise HTTPException(status_code=400, detail="No transactions found in file")
 
-        # Save to storage (B2/S3 compatible)
+        # Save to storage - add filename attribute
         file_stream.seek(0)
+        file_stream.filename = file.filename
         saved_path = save_uploaded_file(file_stream, user_id)
         print(f"[UPLOAD] saved to storage at {saved_path}")
 
-        # Ensure user row
+        # Ensure user row exists
         user_row = supabase.table("users").select("id").eq("id", user_id).execute()
         if not user_row:
             print(f"[UPLOAD] inserting new user record {user_id}")
@@ -70,13 +71,12 @@ async def upload_statement(
                 {"id": user_id, "username": "user"}
             ).execute()
 
-        # Insert statement metadata
+        # Insert statement metadata (without transactions_count)
         supabase.table("statements").insert(
             {
                 "user_id": user_id,
                 "storage_key": saved_path,
                 "file_name": file.filename,
-                "transactions_count": len(df),
                 "uploaded_at": datetime.utcnow().isoformat(),
             }
         ).execute()
@@ -90,9 +90,8 @@ async def upload_statement(
             "storage_path": saved_path,
         }
     except HTTPException:
-        # Let FastAPI return the proper HTTPException
         raise
     except Exception as e:
         print("[UPLOAD] ERROR:", repr(e))
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Upload failed")
+        raise HTTPException(status_code=500, detail=str(e))
