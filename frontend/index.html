@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Budget Tracker - Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="bg-white p-8 rounded-lg shadow-md w-96">
+            <h1 class="text-3xl font-bold mb-6 text-center">🔐 Budget Tracker</h1>
+
+            <div id="loginForm">
+                <input type="email" id="email" placeholder="Email" class="w-full p-3 border rounded mb-3">
+                <input type="password" id="password" placeholder="Password" class="w-full p-3 border rounded mb-4">
+                <button onclick="login()" class="w-full bg-blue-600 text-white p-3 rounded hover:bg-blue-700">
+                    Sign In
+                </button>
+            </div>
+
+            <div id="error" class="mt-4 text-red-600 text-sm hidden"></div>
+        </div>
+    </div>
+
+    <script src="static/js/auth.js"></script>
+</body>
+</html>
