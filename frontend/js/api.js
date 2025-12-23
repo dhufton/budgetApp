@@ -1,8 +1,5 @@
 // frontend/js/api.js
-// Detect if running locally or on production
-const API_BASE = window.location.hostname === 'localhost'
-    ? 'http://localhost:8000'
-    : 'https://budget-tracker-app-n12a.onrender.com';
+const API_BASE = window.location.origin;
 
 // Create api object that dashboard.js expects
 const api = {
