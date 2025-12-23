@@ -11,24 +11,32 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadDashboard() {
-    const data = await getTransactions();
+    try {
+        const data = await getTransactions();
 
-    if (!data) return;
+        if (!data) {
+            console.error('No data returned from /transactions');
+            return;
+        }
 
-    allTransactions = data.transactions;
+        allTransactions = data.transactions || [];
 
-    document.getElementById('totalTransactions').textContent = data.total.toLocaleString();
+        document.getElementById('totalTransactions').textContent = (data.total || 0).toLocaleString();
 
-    if (data.uncategorized_count > 0) {
-        document.getElementById('uncategorizedAlert').classList.remove('hidden');
-        document.getElementById('uncategorizedCount').textContent =
-            `${data.uncategorized_count} transactions need categorization`;
+        if (data.uncategorized_count > 0) {
+            document.getElementById('uncategorizedAlert').classList.remove('hidden');
+            document.getElementById('uncategorizedCount').textContent =
+                `${data.uncategorized_count} transactions need categorization`;
+        }
+
+        calculateMetrics();
+        renderPieChart();
+        renderLineChart();
+        renderTransactionsTable();
+    } catch (error) {
+        console.error('Failed to load dashboard:', error);
+        alert('Failed to load transactions. Please refresh the page.');
     }
-
-    calculateMetrics();
-    renderPieChart();
-    renderLineChart();
-    renderTransactionsTable();
 }
 
 function calculateMetrics() {
@@ -45,6 +53,11 @@ function calculateMetrics() {
 }
 
 function renderPieChart() {
+    if (!allTransactions.length) {
+        document.getElementById('pieChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        return;
+    }
+
     const categoryTotals = {};
 
     allTransactions.filter(t => t.Amount < 0).forEach(t => {
@@ -70,6 +83,11 @@ function renderPieChart() {
 }
 
 function renderLineChart() {
+    if (!allTransactions.length) {
+        document.getElementById('lineChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        return;
+    }
+
     const monthlyData = {};
 
     allTransactions.filter(t => t.Amount < 0).forEach(t => {
@@ -102,6 +120,11 @@ function renderLineChart() {
 function renderTransactionsTable() {
     const tbody = document.getElementById('transactionsTable');
 
+    if (!allTransactions.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-500">No transactions yet. Upload a statement to get started!</td></tr>';
+        return;
+    }
+
     const html = allTransactions.slice(0, 50).map(t => `
         <tr class="border-b hover:bg-gray-50">
             <td class="py-3 px-4">${t.Date}</td>
@@ -119,7 +142,7 @@ function renderTransactionsTable() {
         </tr>
     `).join('');
 
-    tbody.innerHTML = html || '<tr><td colspan="4" class="text-center py-8 text-gray-500">No transactions yet</td></tr>';
+    tbody.innerHTML = html;
 }
 
 async function uploadFiles() {
@@ -136,15 +159,21 @@ async function uploadFiles() {
     status.className = 'mt-2 text-sm text-blue-600';
 
     for (const file of files) {
-        const result = await uploadFile(file);
-        if (result.success) {
-            status.textContent = `✅ Uploaded ${file.name}`;
-            status.className = 'mt-2 text-sm text-green-600';
-        } else {
-            status.textContent = `❌ Failed: ${result.message}`;
+        try {
+            const result = await uploadFile(file);
+            if (result.success) {
+                status.textContent = `✅ Uploaded ${file.name}`;
+                status.className = 'mt-2 text-sm text-green-600';
+            } else {
+                status.textContent = `❌ Failed: ${result.message}`;
+                status.className = 'mt-2 text-sm text-red-600';
+            }
+        } catch (error) {
+            status.textContent = `❌ Failed: ${error.message}`;
             status.className = 'mt-2 text-sm text-red-600';
         }
     }
 
+    // Reload after 1 second
     setTimeout(() => loadDashboard(), 1000);
 }
