@@ -4,68 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Budget Tracker - Login</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
-    <div class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
-            <div class="text-center mb-8">
-                <h1 class="text-4xl font-bold text-gray-800 mb-2">💰 Budget Tracker</h1>
-                <p class="text-gray-600">Track your finances with ease</p>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <h1>Budget Tracker</h1>
+            <p>Manage your finances with ease</p>
+
+            <div class="tabs">
+                <button id="loginTab" class="tab active" onclick="showLogin()">Login</button>
+                <button id="registerTab" class="tab" onclick="showRegister()">Register</button>
             </div>
 
-            <div class="mb-6">
-                <div class="flex border-b border-gray-200">
-                    <button onclick="showLogin()" id="loginTab" class="flex-1 py-3 text-center font-semibold border-b-2 border-blue-600 text-blue-600">
-                        Login
-                    </button>
-                    <button onclick="showRegister()" id="registerTab" class="flex-1 py-3 text-center font-semibold text-gray-500 hover:text-gray-700">
-                        Register
-                    </button>
+            <!-- Login Form -->
+            <form id="loginForm" onsubmit="event.preventDefault(); login();">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required autocomplete="email">
                 </div>
-            </div>
-
-            <div id="loginForm">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                        <input type="email" id="loginEmail" placeholder="you@example.com"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                        <input type="password" id="loginPassword" placeholder="••••••••"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <button onclick="login()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
-                        Sign In
-                    </button>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required autocomplete="current-password">
                 </div>
-            </div>
+                <button type="submit" class="btn">Sign In</button>
+            </form>
 
-            <div id="registerForm" class="hidden">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                        <input type="email" id="registerEmail" placeholder="you@example.com"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                        <input type="password" id="registerPassword" placeholder="••••••••"
-                            class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <button onclick="register()" class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition duration-200">
-                        Create Account
-                    </button>
+            <!-- Register Form -->
+            <form id="registerForm" class="hidden" onsubmit="event.preventDefault(); register();">
+                <div class="form-group">
+                    <label for="registerEmail">Email</label>
+                    <input type="email" id="registerEmail" required autocomplete="email">
                 </div>
-            </div>
+                <div class="form-group">
+                    <label for="registerPassword">Password</label>
+                    <input type="password" id="registerPassword" required autocomplete="new-password" minlength="6">
+                </div>
+                <button type="submit" class="btn">Create Account</button>
+            </form>
 
-            <div id="message" class="mt-4 p-3 rounded-lg hidden"></div>
+            <div id="message" class="hidden mt-4"></div>
         </div>
     </div>
 
-    <script src="js/auth.js"></script>
+    <script src="/js/auth.js"></script>
 </body>
 </html>
