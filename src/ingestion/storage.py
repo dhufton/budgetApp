@@ -2,7 +2,7 @@
 import io
 import pandas as pd
 from src.supabase_client import supabase
-from storage.b2_client import (
+from src.storage.b2_client import (
     upload_statement,
     download_statement as b2_download_statement,
     read_statement_csv,
