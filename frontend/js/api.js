@@ -7,7 +7,7 @@ const API_BASE = window.location.hostname === 'localhost'
 // Create api object that dashboard.js expects
 const api = {
     async getTransactions() {
-        const token = localStorage.getItem('access_token'); // Fixed: was 'token'
+        const token = localStorage.getItem('access_token');
 
         if (!token) {
             console.error('No token found, redirecting to login');
@@ -17,7 +17,7 @@ const api = {
 
         try {
             console.log('Fetching transactions...');
-            const response = await fetch(`${API_BASE}/transactions`, {
+            const response = await fetch(`${API_BASE}/api/transactions`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -47,7 +47,7 @@ const api = {
     },
 
     async uploadFile(formData) {
-        const token = localStorage.getItem('access_token'); // Fixed: was 'token'
+        const token = localStorage.getItem('access_token');
 
         if (!token) {
             console.error('No token found');
@@ -56,7 +56,7 @@ const api = {
         }
 
         try {
-            const response = await fetch(`${API_BASE}/upload`, {
+            const response = await fetch(`${API_BASE}/api/upload`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -73,7 +73,6 @@ const api = {
                 return null;
             }
 
-            // Handle 409 Conflict (duplicate file)
             if (response.status === 409) {
                 const data = await response.json();
                 throw new Error(data.message || 'File already exists');
@@ -100,7 +99,7 @@ const api = {
         }
 
         try {
-            const response = await fetch(`${API_BASE}/categories`, {
+            const response = await fetch(`${API_BASE}/api/categories`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -134,7 +133,7 @@ const api = {
         }
 
         try {
-            const response = await fetch(`${API_BASE}/budget-targets`, {
+            const response = await fetch(`${API_BASE}/api/budget-targets`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -168,7 +167,7 @@ const api = {
         }
 
         try {
-            const response = await fetch(`${API_BASE}/budget-comparison`, {
+            const response = await fetch(`${API_BASE}/api/budget-comparison`, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
