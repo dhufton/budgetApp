@@ -12,9 +12,17 @@ from api.routes import transactions, upload, categories, budget
 
 app = FastAPI(title="Budget Tracker API", version="1.0.0")
 
+origins = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "https://budgetapp-fusi.onrender.com",
+    "https://budget-tracker-app-n12a.onrender.com"
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
