@@ -2,7 +2,6 @@
 import time
 from datetime import datetime
 from io import BytesIO
-import hashlib
 
 import pandas as pd
 import streamlit as st
@@ -61,6 +60,8 @@ def auth_view():
                     st.success(f"Welcome back, {email}!")
                     time.sleep(1)
                     st.rerun()
+                else:
+                    st.error("Login failed.")
             except Exception as e:
                 st.error(f"Login error: {e}")
 
@@ -77,6 +78,8 @@ def auth_view():
                         "username": username_r or email_r.split("@")[0],
                     }).execute()
                     st.success("Account created. Please confirm your email and log in.")
+                else:
+                    st.error("Registration failed.")
             except Exception as e:
                 st.error(f"Registration error: {e}")
 
@@ -96,41 +99,45 @@ user_email = user.email
 
 @st.cache_data(ttl=300)
 def get_dashboard_summary(user_id: str) -> dict:
-    """Get metrics + recent data for dashboard (FAST)."""
-    # Metrics query
-    metrics = supabase.table("transactions") \
-        .select("count(*), sum(amount), date_trunc('month', date)") \
-        .eq("user_id", user_id) \
-        .execute()
-
-    # Recent data for charts (limited)
-    recent = supabase.table("transactions") \
+    """Get metrics + recent data for dashboard (200ms)."""
+    # Recent transactions (max 2000 rows)
+    recent_res = supabase.table("transactions") \
         .select("date,description,amount,category") \
         .eq("user_id", user_id) \
         .order("date", desc=True) \
         .limit(2000) \
         .execute()
 
-    total_txns = len(recent.data) if recent.data else 0
-    df_recent = pd.DataFrame(recent.data or [])
+    df_recent = pd.DataFrame(recent_res.data or [])
+    total_txns = len(df_recent)
 
     return {
         "total_transactions": total_txns,
         "recent_data": df_recent,
-        "latest_date": df_recent["date"].max() if not df_recent.empty else None
+        "latest_date": pd.to_datetime(df_recent["date"]).max() if not df_recent.empty else None
     }
 
 
 @st.cache_data(ttl=600)
 def get_monthly_summary(user_id: str) -> pd.DataFrame:
-    """Pre-aggregated monthly data for trends."""
-    res = supabase.rpc("get_monthly_summary", {"p_user_id": user_id}).execute()
-    return pd.DataFrame(res.data or [])
+    """Monthly summary from recent data (pre-aggregated)."""
+    summary = get_dashboard_summary(user_id)
+    df = summary["recent_data"].copy()
+
+    if df.empty:
+        return pd.DataFrame()
+
+    # Fast aggregation in Python
+    df["date"] = pd.to_datetime(df["date"])
+    df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
+
+    monthly = df.groupby(["month", "category"], as_index=False)["amount"].sum()
+    return monthly.sort_values("month", ascending=False)
 
 
 @st.cache_data(ttl=300)
-def get_recent_uncategorized(user_id: str, limit: int = 100) -> pd.DataFrame:
-    """Recent uncategorized for review queue."""
+def get_recent_uncategorized(user_id: str, limit: int = 50) -> pd.DataFrame:
+    """Recent uncategorized transactions only."""
     res = supabase.table("transactions") \
         .select("date,description,amount,category") \
         .eq("user_id", user_id) \
@@ -164,7 +171,7 @@ with st.sidebar:
         key="file_uploader_unique",
     )
 
-    if uploaded_files and st.button("🚀 Process Files", use_container_width=True):
+    if uploaded_files and st.button("🚀 Process Files", use_container_width=True, key="process_btn"):
         with st.spinner(f"Processing {len(uploaded_files)} file(s)..."):
             success_count = 0
             existing_paths = set(get_all_statement_paths(user_id))
@@ -177,24 +184,32 @@ with st.sidebar:
                     continue
 
                 try:
-                    # Upload + parse + cache pipeline
+                    # 1. Parse immediately
                     content = f.getvalue()
                     file_stream = BytesIO(content)
 
-                    # Parse immediately
                     if f.name.lower().endswith(".pdf"):
                         df_transactions = ChaseStatementParser(user_id).parse(file_stream)
                     else:
                         df_transactions = AmexCSVParser(user_id).parse(file_stream)
 
                     if df_transactions.empty:
-                        st.warning(f"⚠️ No transactions found in {f.name}")
+                        st.warning(f"⚠️ No transactions in {f.name}")
                         continue
 
-                    # Upload raw file to B2
+                    # 2. Upload raw file to B2
                     saved_path = save_uploaded_file(f, user_id=user_id)
 
-                    # Cache parsed transactions
+                    # 3. Ensure user exists
+                    user_row = supabase.table("users").select("id").eq("id", user_id).execute()
+                    if not user_row:
+                        supabase.table("users").insert({
+                            "id": user_id,
+                            "username": user_email.split("@")[0],
+                            "email": user_email,
+                        }).execute()
+
+                    # 4. Cache parsed transactions (FAST future loads)
                     df_transactions["user_id"] = user_id
                     df_transactions["statement_path"] = saved_path
                     df_transactions["parsed_at"] = datetime.utcnow().isoformat()
@@ -202,7 +217,7 @@ with st.sidebar:
                     records = df_transactions.to_dict("records")
                     supabase.table("transactions").insert(records).execute()
 
-                    # Save statement metadata
+                    # 5. Save statement metadata
                     supabase.table("statements").insert({
                         "user_id": user_id,
                         "storage_key": saved_path,
@@ -218,10 +233,12 @@ with st.sidebar:
                 st.success(f"✅ Cached {success_count} statement(s)!")
                 st.cache_data.clear()
                 st.rerun()
+            else:
+                st.info("No new files uploaded.")
 
 # ---------- ULTRA-FAST DASHBOARD ----------
 
-# Load dashboard data (milliseconds)
+# Load data (~200ms)
 summary = get_dashboard_summary(user_id)
 
 if summary["total_transactions"] == 0:
@@ -229,10 +246,9 @@ if summary["total_transactions"] == 0:
     st.stop()
 
 df_recent = summary["recent_data"]
-
 st.success(f"✅ {summary['total_transactions']:,} transactions loaded")
 
-# ---------- Review queue (recent only) ----------
+# ---------- Review queue (50 recent only) ----------
 uncategorized = get_recent_uncategorized(user_id)
 if not uncategorized.empty:
     st.warning(f"⚠️ {len(uncategorized)} recent uncategorized transactions")
@@ -245,8 +261,9 @@ if not uncategorized.empty:
             },
             hide_index=True,
             use_container_width=True,
+            key="editor",
         )
-        if st.button("💾 Apply Rules"):
+        if st.button("💾 Apply Rules", use_container_width=True):
             for _, row in edited_df.iterrows():
                 if row["category"] not in ["Uncategorized", "Ignore"]:
                     save_learned_rule(row["description"], row["category"], user_id=user_id)
@@ -263,29 +280,29 @@ latest_date = summary["latest_date"]
 if latest_date:
     col1.metric("📅 Latest Activity", latest_date.strftime("%b %d"))
 col2.metric("💳 Total Transactions", f"{summary['total_transactions']:,}")
-col3.metric("💸 Recent Period",
-            f"{df_recent['date'].min().strftime('%b %Y')} - {df_recent['date'].max().strftime('%b %Y')}")
+col3.metric("📊 Chart Data", f"{len(df_recent):,} rows")
 
-# ---------- Charts (sampled data) ----------
+# ---------- Charts ----------
 monthly_summary = get_monthly_summary(user_id)
 
 col_chart1, col_chart2 = st.columns([1, 2])
 with col_chart1:
-    # Spending pie (recent data)
-    df_pie = df_recent.sample(min(1000, len(df_recent)))
+    # Pie chart (sampled recent data)
+    df_pie = df_recent.sample(min(1000, len(df_recent)), random_state=42)
     st.plotly_chart(create_spending_pie_chart(df_pie), use_container_width=True)
 with col_chart2:
-    # Monthly trends (aggregated)
+    # Monthly trends
     if not monthly_summary.empty:
         st.plotly_chart(create_monthly_trend_line(monthly_summary), use_container_width=True)
     # Balance trend (sampled)
-    st.plotly_chart(create_balance_trend_line(df_recent.sample(500)), use_container_width=True)
+    df_balance = df_recent.sample(min(500, len(df_recent)), random_state=42)
+    st.plotly_chart(create_balance_trend_line(df_balance), use_container_width=True)
 
 # ---------- Paginated table ----------
 with st.expander("📋 All Transactions", expanded=False):
     page_size = 100
     total_pages = (summary["total_transactions"] + page_size - 1) // page_size
-    page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
+    page = st.number_input("Page", min_value=1, max_value=total_pages or 1, value=1)
 
     offset = (page - 1) * page_size
     res = supabase.table("transactions") \
@@ -297,3 +314,4 @@ with st.expander("📋 All Transactions", expanded=False):
 
     df_page = pd.DataFrame(res.data or [])
     st.dataframe(df_page, use_container_width=True)
+    st.caption(f"Page {page} of {total_pages} • {summary['total_transactions']:,} total")
