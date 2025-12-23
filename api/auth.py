@@ -1,6 +1,9 @@
 # api/auth.py
-from fastapi import Header, HTTPException, Depends
+from fastapi import Header, HTTPException
 from typing import Optional
+import os
+
+from src.supabase_client import supabase
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
@@ -9,11 +12,9 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        # Parse JWT token
         token = authorization.replace("Bearer ", "")
-        from src.supabase_client import supabase
-
         user = supabase.auth.get_user(token)
+
         if not user or not user.user:
             raise HTTPException(status_code=401, detail="Invalid token")
 

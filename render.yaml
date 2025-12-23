@@ -5,11 +5,16 @@ services:
     region: frankfurt
     plan: free
     branch: main
-    buildCommand: pip install -r api/requirements.txt
-    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r api/requirements.txt --no-cache-dir
+
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1
+
     envVars:
       - key: PYTHON_VERSION
-        value: 3.13.2
+        value: 3.11.11
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_KEY
@@ -18,4 +23,8 @@ services:
         sync: false
       - key: B2_APP_KEY
         sync: false
+      - key: B2_BUCKET_NAME
+        sync: false
+
     healthCheckPath: /health
+    runtime: python

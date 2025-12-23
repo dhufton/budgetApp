@@ -4,7 +4,6 @@ from datetime import datetime
 from io import BytesIO
 
 import pandas as pd
-import streamlit as st
 
 from supabase_client import supabase
 from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement

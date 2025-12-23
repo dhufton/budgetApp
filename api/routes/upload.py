@@ -21,17 +21,17 @@ async def upload_statement(
         user_id: str = Depends(get_current_user)
 ):
     try:
+        # Check if already exists
         existing_paths = set(get_all_statement_paths(user_id))
         storage_path = f"{user_id}/{file.filename}"
 
         if storage_path in existing_paths:
             return {"success": False, "message": f"{file.filename} already exists"}
 
-        # Read file content
+        # Read and parse
         content = await file.read()
         file_stream = BytesIO(content)
 
-        # Parse based on file type
         if file.filename.lower().endswith(".pdf"):
             df = ChaseStatementParser(user_id).parse(file_stream)
         elif file.filename.lower().endswith(".csv"):
@@ -42,6 +42,14 @@ async def upload_statement(
         # Upload to B2
         file_stream.seek(0)
         saved_path = save_uploaded_file(file_stream, user_id=user_id)
+
+        # Ensure user exists
+        user_row = supabase.table("users").select("id").eq("id", user_id).execute()
+        if not user_row:
+            supabase.table("users").insert({
+                "id": user_id,
+                "username": "user",
+            }).execute()
 
         # Save metadata
         supabase.table("statements").insert({

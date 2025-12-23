@@ -1,19 +1,14 @@
 # api/main.py
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
-from typing import List, Optional
+from fastapi.responses import FileResponse
 import sys
 import os
 
-# Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.supabase_client import supabase
-from api.auth import get_current_user
-from api.routes import transactions, upload, categories, budget
+from api.routes import transactions, upload, categories, budget, analytics
 
 app = FastAPI(title="Budget Tracker API", version="1.0.0")
 
@@ -26,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
+# Mount frontend
 app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 # Include routers
@@ -34,6 +29,7 @@ app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(budget.router, prefix="/api", tags=["budget"])
+app.include_router(analytics.router, prefix="/api", tags=["analytics"])
 
 @app.get("/")
 async def root():

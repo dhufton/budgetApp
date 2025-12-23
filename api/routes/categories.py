@@ -1,41 +1,51 @@
 # api/routes/categories.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.supabase_client import supabase
+from src.budgeting.categories import (
+    get_user_categories,
+    add_category,
+    delete_category
+)
 from api.auth import get_current_user
 
 router = APIRouter()
 
-class Category(BaseModel):
+
+class CategoryCreate(BaseModel):
     name: str
-    color: str = "#3b82f6"
+
 
 @router.get("/categories")
 async def get_categories(user_id: str = Depends(get_current_user)):
-    res = supabase.table("categories").select("*").eq("user_id", user_id).execute()
-    return res.data or []
+    """Get all user categories."""
+    categories = get_user_categories(user_id)
+    return {"categories": sorted(categories)}
+
 
 @router.post("/categories")
 async def create_category(
-    category: Category,
-    user_id: str = Depends(get_current_user)
+        category: CategoryCreate,
+        user_id: str = Depends(get_current_user)
 ):
-    supabase.table("categories").insert({
-        "user_id": user_id,
-        "name": category.name,
-        "color": category.color
-    }).execute()
-    return {"success": True}
+    """Add a new category."""
+    existing = get_user_categories(user_id)
+    if category.name in existing:
+        raise HTTPException(400, "Category already exists")
+
+    add_category(user_id, category.name)
+    return {"success": True, "message": f"Added '{category.name}'"}
+
 
 @router.delete("/categories/{category_name}")
-async def delete_category(
-    category_name: str,
-    user_id: str = Depends(get_current_user)
+async def remove_category(
+        category_name: str,
+        user_id: str = Depends(get_current_user)
 ):
-    supabase.table("categories").delete().eq("user_id", user_id).eq("name", category_name).execute()
-    return {"success": True}
+    """Delete a category."""
+    delete_category(user_id, category_name)
+    return {"success": True, "message": f"Deleted '{category_name}'"}
