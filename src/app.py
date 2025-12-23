@@ -36,7 +36,7 @@ def logout():
     st.session_state.pop("supabase_session", None)
 
 
-# Hydrate supabase session
+# Hydrate supabase session on rerun if we have it
 if "supabase_session" in st.session_state:
     try:
         session = st.session_state["supabase_session"]
@@ -95,63 +95,52 @@ user_id = user.id
 user_email = user.email
 
 
-# ---------- ULTRA-FAST DATA LOADERS ----------
+# ---------- Data loading & parsing (from storage) ----------
 
-@st.cache_data(ttl=300)
-def get_dashboard_summary(user_id: str) -> dict:
-    """Get metrics + recent data for dashboard (200ms)."""
-    # Recent transactions (max 2000 rows)
-    recent_res = supabase.table("transactions") \
-        .select("date,description,amount,category") \
-        .eq("user_id", user_id) \
-        .order("date", desc=True) \
-        .limit(2000) \
-        .execute()
-
-    df_recent = pd.DataFrame(recent_res.data or [])
-    total_txns = len(df_recent)
-
-    return {
-        "total_transactions": total_txns,
-        "recent_data": df_recent,
-        "latest_date": pd.to_datetime(df_recent["date"]).max() if not df_recent.empty else None
-    }
-
-
-@st.cache_data(ttl=600)
-def get_monthly_summary(user_id: str) -> pd.DataFrame:
-    """Monthly summary from recent data (pre-aggregated)."""
-    summary = get_dashboard_summary(user_id)
-    df = summary["recent_data"].copy()
-
-    if df.empty:
+@st.cache_data(ttl=300, show_spinner=True)
+def load_and_parse_statements(_user_id: str) -> pd.DataFrame:
+    """Load and parse all statements from storage for this user."""
+    paths = get_all_statement_paths(user_id=_user_id)
+    if not paths:
         return pd.DataFrame()
 
-    # Fast aggregation in Python
-    df["date"] = pd.to_datetime(df["date"])
-    df["month"] = df["date"].dt.to_period("M").dt.to_timestamp()
+    all_dfs = []
+    chase_parser = ChaseStatementParser(user_id=_user_id)
+    amex_parser = AmexCSVParser(user_id=_user_id)
 
-    monthly = df.groupby(["month", "category"], as_index=False)["amount"].sum()
-    return monthly.sort_values("month", ascending=False)
+    for storage_path in paths:
+        content = download_statement(storage_path)
+        if not content:
+            continue
 
+        file_name = storage_path.split("/")[-1]
+        file_stream = BytesIO(content)
 
-@st.cache_data(ttl=300)
-def get_recent_uncategorized(user_id: str, limit: int = 50) -> pd.DataFrame:
-    """Recent uncategorized transactions only."""
-    res = supabase.table("transactions") \
-        .select("date,description,amount,category") \
-        .eq("user_id", user_id) \
-        .eq("category", "Uncategorized") \
-        .order("date", desc=True) \
-        .limit(limit) \
-        .execute()
-    return pd.DataFrame(res.data or [])
+        try:
+            if file_name.lower().endswith(".pdf"):
+                df_file = chase_parser.parse(file_stream)
+            elif file_name.lower().endswith(".csv"):
+                df_file = amex_parser.parse(file_stream)
+            else:
+                continue
+
+            if not df_file.empty:
+                all_dfs.append(df_file)
+        except Exception as e:
+            print(f"Failed to parse {file_name}: {e}")
+
+    if not all_dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
+    return df.sort_values("Date", ascending=False)
 
 
 # ---------- Main layout ----------
 
 st.title("📊 Personal Finance Dashboard")
 st.sidebar.markdown(f"👤 **{user_email}**")
+
 
 # ---------- Sidebar: logout + upload ----------
 
@@ -184,23 +173,10 @@ with st.sidebar:
                     continue
 
                 try:
-                    # 1. Parse immediately
-                    content = f.getvalue()
-                    file_stream = BytesIO(content)
-
-                    if f.name.lower().endswith(".pdf"):
-                        df_transactions = ChaseStatementParser(user_id).parse(file_stream)
-                    else:
-                        df_transactions = AmexCSVParser(user_id).parse(file_stream)
-
-                    if df_transactions.empty:
-                        st.warning(f"⚠️ No transactions in {f.name}")
-                        continue
-
-                    # 2. Upload raw file to B2
+                    # 1. Upload raw file to B2
                     saved_path = save_uploaded_file(f, user_id=user_id)
 
-                    # 3. Ensure user exists
+                    # 2. Ensure user exists
                     user_row = supabase.table("users").select("id").eq("id", user_id).execute()
                     if not user_row:
                         supabase.table("users").insert({
@@ -209,15 +185,7 @@ with st.sidebar:
                             "email": user_email,
                         }).execute()
 
-                    # 4. Cache parsed transactions (FAST future loads)
-                    df_transactions["user_id"] = user_id
-                    df_transactions["statement_path"] = saved_path
-                    df_transactions["parsed_at"] = datetime.utcnow().isoformat()
-
-                    records = df_transactions.to_dict("records")
-                    supabase.table("transactions").insert(records).execute()
-
-                    # 5. Save statement metadata
+                    # 3. Save statement metadata (if you use the statements table)
                     supabase.table("statements").insert({
                         "user_id": user_id,
                         "storage_key": saved_path,
@@ -230,88 +198,71 @@ with st.sidebar:
                     st.error(f"❌ {f.name}: {e}")
 
             if success_count > 0:
-                st.success(f"✅ Cached {success_count} statement(s)!")
+                st.success(f"✅ Saved {success_count} new statement(s)!")
                 st.cache_data.clear()
                 st.rerun()
             else:
                 st.info("No new files uploaded.")
 
-# ---------- ULTRA-FAST DASHBOARD ----------
 
-# Load data (~200ms)
-summary = get_dashboard_summary(user_id)
+# ---------- Load data & build dashboard ----------
 
-if summary["total_transactions"] == 0:
-    st.info("👋 No transactions yet. Upload statements to get started!")
+df = load_and_parse_statements(user_id)
+
+if df.empty:
+    st.info("👋 No statements found yet. Upload some using the sidebar to see your dashboard.")
     st.stop()
 
-df_recent = summary["recent_data"]
-st.success(f"✅ {summary['total_transactions']:,} transactions loaded")
+st.success(f"✅ Loaded {len(df):,} transactions from {len(get_all_statement_paths(user_id))} files")
 
-# ---------- Review queue (50 recent only) ----------
-uncategorized = get_recent_uncategorized(user_id)
+
+# ---------- Review queue ----------
+
+uncategorized = df[df["Category"] == "Uncategorized"].copy()
 if not uncategorized.empty:
-    st.warning(f"⚠️ {len(uncategorized)} recent uncategorized transactions")
-    with st.expander("📝 Quick Review", expanded=True):
+    st.warning(f"⚠️ {len(uncategorized)} uncategorized transactions to review.")
+    with st.expander("📝 Review & Categorize", expanded=True):
         options = sorted(list(CATEGORY_RULES.keys())) + ["Uncategorized", "Ignore"]
         edited_df = st.data_editor(
-            uncategorized[["date", "description", "amount", "category"]],
+            uncategorized[["Date", "Description", "Amount", "Category"]],
             column_config={
-                "category": st.column_config.SelectboxColumn("Assign Category", options=options)
+                "Category": st.column_config.SelectboxColumn("Assign Category", options=options)
             },
             hide_index=True,
             use_container_width=True,
             key="editor",
         )
-        if st.button("💾 Apply Rules", use_container_width=True):
+        if st.button("💾 Save Rules", use_container_width=True, key="btn_save_rules"):
             for _, row in edited_df.iterrows():
-                if row["category"] not in ["Uncategorized", "Ignore"]:
-                    save_learned_rule(row["description"], row["category"], user_id=user_id)
-            st.success("✅ Rules saved!")
+                if row["Category"] not in ["Uncategorized", "Ignore"]:
+                    save_learned_rule(row["Description"], row["Category"], user_id=user_id)
+            st.success("✅ Rules updated!")
             st.cache_data.clear()
             st.rerun()
 
-# ---------- Metrics ----------
+
+# ---------- Dashboard metrics & charts ----------
+
 st.divider()
-st.markdown("### 📈 Quick Stats")
+st.markdown("### 📈 Dashboard Snapshot")
 
 col1, col2, col3 = st.columns(3)
-latest_date = summary["latest_date"]
-if latest_date:
-    col1.metric("📅 Latest Activity", latest_date.strftime("%b %d"))
-col2.metric("💳 Total Transactions", f"{summary['total_transactions']:,}")
-col3.metric("📊 Chart Data", f"{len(df_recent):,} rows")
+latest_month = df["Date"].dt.to_period("M").max()
+month_df = df[df["Date"].dt.to_period("M") == latest_month]
 
-# ---------- Charts ----------
-monthly_summary = get_monthly_summary(user_id)
+spend = month_df[(month_df["Category"] != "Savings") & (month_df["Amount"] < 0)]["Amount"].sum() * -1
+saved = month_df[month_df["Category"] == "Savings"]["Amount"].sum() * -1
+
+col1.metric("📅 Latest Month", str(latest_month))
+col2.metric("💸 Total Spent", f"£{spend:,.0f}")
+col3.metric("💰 Net Saved", f"£{saved:,.0f}")
 
 col_chart1, col_chart2 = st.columns([1, 2])
 with col_chart1:
-    # Pie chart (sampled recent data)
-    df_pie = df_recent.sample(min(1000, len(df_recent)), random_state=42)
-    st.plotly_chart(create_spending_pie_chart(df_pie), use_container_width=True)
+    st.plotly_chart(create_spending_pie_chart(df), use_container_width=True)
 with col_chart2:
-    # Monthly trends
-    if not monthly_summary.empty:
-        st.plotly_chart(create_monthly_trend_line(monthly_summary), use_container_width=True)
-    # Balance trend (sampled)
-    df_balance = df_recent.sample(min(500, len(df_recent)), random_state=42)
-    st.plotly_chart(create_balance_trend_line(df_balance), use_container_width=True)
+    st.plotly_chart(create_monthly_trend_line(df), use_container_width=True)
+    st.plotly_chart(create_balance_trend_line(df), use_container_width=True)
 
-# ---------- Paginated table ----------
-with st.expander("📋 All Transactions", expanded=False):
-    page_size = 100
-    total_pages = (summary["total_transactions"] + page_size - 1) // page_size
-    page = st.number_input("Page", min_value=1, max_value=total_pages or 1, value=1)
-
-    offset = (page - 1) * page_size
-    res = supabase.table("transactions") \
-        .select("date,description,amount,category") \
-        .eq("user_id", user_id) \
-        .order("date", desc=True) \
-        .range(offset, offset + page_size - 1) \
-        .execute()
-
-    df_page = pd.DataFrame(res.data or [])
-    st.dataframe(df_page, use_container_width=True)
-    st.caption(f"Page {page} of {total_pages} • {summary['total_transactions']:,} total")
+with st.expander("📋 View All Transactions", expanded=False):
+    st.dataframe(df, use_container_width=True)
