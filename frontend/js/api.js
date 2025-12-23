@@ -1,122 +1,195 @@
 // frontend/js/api.js
-const API_BASE = window.location.origin + '/api';
+// Detect if running locally or on production
+const API_BASE = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://budget-tracker-app-n12a.onrender.com';
 
-async function apiCall(endpoint, options = {}) {
-    const token = localStorage.getItem('token');
+// Create api object that dashboard.js expects
+const api = {
+    async getTransactions() {
+        const token = localStorage.getItem('access_token'); // Fixed: was 'token'
 
-    if (!token) {
-        console.error('No token found, redirecting to login');
-        window.location.href = '/';
-        return null;
-    }
-
-    try {
-        console.log(`API call: ${endpoint}`);
-        const response = await fetch(`${API_BASE}${endpoint}`, {
-            ...options,
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-                ...options.headers
-            }
-        });
-
-        console.log(`Response: ${response.status}`);
-
-        if (response.status === 401) {
-            console.error('Unauthorized - clearing token');
-            localStorage.removeItem('token');
+        if (!token) {
+            console.error('No token found, redirecting to login');
             window.location.href = '/';
             return null;
         }
 
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            const data = await response.json();
-            if (!response.ok) {
-                console.error('API Error:', data);
-                throw new Error(data.detail || 'Request failed');
+        try {
+            console.log('Fetching transactions...');
+            const response = await fetch(`${API_BASE}/transactions`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            console.log(`Transactions response: ${response.status}`);
+
+            if (response.status === 401) {
+                console.error('Unauthorized - clearing token');
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
             }
-            return data;
-        } else {
-            const text = await response.text();
-            console.error('Non-JSON response:', text);
-            throw new Error(`Server error: ${response.status}`);
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch transactions:', error);
+            throw error;
         }
-    } catch (error) {
-        console.error('API call failed:', error);
-        throw error;
-    }
-}
+    },
 
-async function uploadFile(file) {
-    const token = localStorage.getItem('token');
+    async uploadFile(formData) {
+        const token = localStorage.getItem('access_token'); // Fixed: was 'token'
 
-    if (!token) {
-        console.error('No token found');
-        window.location.href = '/';
-        return null;
-    }
-
-    console.log('Uploading file:', file.name);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        const response = await fetch(`${API_BASE}/upload`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: formData
-        });
-
-        console.log(`Upload response: ${response.status}`);
-
-        if (response.status === 401) {
-            console.error('Unauthorized - clearing token');
-            localStorage.removeItem('token');
+        if (!token) {
+            console.error('No token found');
             window.location.href = '/';
             return null;
         }
 
-        if (response.status === 409) {
-            const data = await response.json();
-            throw new Error(data.message || 'File already exists');
-    }
+        try {
+            const response = await fetch(`${API_BASE}/upload`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                },
+                body: formData
+            });
 
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            const data = await response.json();
-            if (!response.ok) {
-                console.error('Upload error:', data);
-                throw new Error(data.detail || 'Upload failed');
+            console.log(`Upload response: ${response.status}`);
+
+            if (response.status === 401) {
+                console.error('Unauthorized - clearing token');
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
             }
-            return data;
-        } else {
-            const text = await response.text();
-            console.error('Upload non-JSON response:', text);
-            throw new Error(`Server error: ${response.status}`);
+
+            // Handle 409 Conflict (duplicate file)
+            if (response.status === 409) {
+                const data = await response.json();
+                throw new Error(data.message || 'File already exists');
+            }
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Upload failed');
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Upload failed:', error);
+            throw error;
         }
-    } catch (error) {
-        console.error('Upload failed:', error);
-        throw error;
+    },
+
+    async getCategories() {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/categories`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch categories:', error);
+            throw error;
+        }
+    },
+
+    async getBudgetTargets() {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/budget-targets`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget targets:', error);
+            throw error;
+        }
+    },
+
+    async getBudgetComparison() {
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            window.location.href = '/';
+            return null;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE}/budget-comparison`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.status === 401) {
+                localStorage.removeItem('access_token');
+                window.location.href = '/';
+                return null;
+            }
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget comparison:', error);
+            throw error;
+        }
     }
-}
-
-async function getTransactions() {
-    return apiCall('/transactions');
-}
-
-async function getCategories() {
-    return apiCall('/categories');
-}
-
-async function getBudgetTargets() {
-    return apiCall('/budget-targets');
-}
-
-async function getBudgetComparison() {
-    return apiCall('/budget-comparison');
-}
+};
