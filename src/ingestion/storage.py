@@ -2,7 +2,7 @@
 import os
 from typing import List, Optional
 
-from b2_client import (
+from src.ingestion.b2_client import (
     upload_file_to_b2,
     list_files_in_b2,
     download_file_from_b2,
