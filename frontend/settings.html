@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Budget Tracker</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container dashboard">
+        <!-- Header -->
+        <div class="dashboard-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <a href="/dashboard" style="text-decoration: none; color: #667eea; font-size: 1.5rem;">←</a>
+                <h1>⚙️ Settings</h1>
+            </div>
+            <div class="user-info">
+                <span class="user-email" id="userEmail">user@example.com</span>
+                <button onclick="logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="settings-tabs">
+            <button class="settings-tab active" onclick="showTab('categories')">Categories</button>
+            <button class="settings-tab" onclick="showTab('budget')">Budget Targets</button>
+        </div>
+
+        <!-- Categories Section -->
+        <div id="categoriesSection" class="settings-section">
+            <div class="upload-section">
+                <h2>Manage Categories</h2>
+                <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                    Add custom categories to organize your transactions. Default categories include: Food, Transport, Shopping, Entertainment, Bills, Savings, and Uncategorized.
+                </p>
+
+                <!-- Add Category Form -->
+                <div class="form-inline">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="newCategory">New Category Name</label>
+                        <input type="text" id="newCategory" placeholder="e.g., Health, Travel, Gifts">
+                    </div>
+                    <button onclick="addCategory()" class="btn" style="margin-top: 1.75rem;">Add Category</button>
+                </div>
+                <div id="categoryStatus" style="margin-top: 0.75rem;"></div>
+
+                <!-- Categories List -->
+                <div style="margin-top: 2rem;">
+                    <h3 style="font-size: 1rem; margin-bottom: 1rem; color: #374151;">Your Categories</h3>
+                    <div id="categoriesList" class="categories-grid">
+                        <div class="text-center" style="padding: 2rem; color: #6b7280;">
+                            <div class="loading" style="margin: 0 auto 0.5rem;"></div>
+                            Loading categories...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget Targets Section -->
+        <div id="budgetSection" class="settings-section hidden">
+            <div class="upload-section">
+                <h2>Budget Targets</h2>
+                <p style="color: #6b7280; margin-bottom: 1.5rem; font-size: 0.9rem;">
+                    Set monthly spending targets for each category to track your budget goals.
+                </p>
+
+                <!-- Add Budget Target Form -->
+                <div class="budget-form">
+                    <div class="form-group">
+                        <label for="budgetCategory">Category</label>
+                        <select id="budgetCategory" class="form-select">
+                            <option value="">Loading categories...</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="budgetAmount">Monthly Target (£)</label>
+                        <input type="number" id="budgetAmount" placeholder="e.g., 500" min="0" step="0.01">
+                    </div>
+                    <button onclick="setBudgetTarget()" class="btn">Set Target</button>
+                </div>
+                <div id="budgetStatus" style="margin-top: 0.75rem;"></div>
+
+                <!-- Budget Targets List -->
+                <div style="margin-top: 2rem;">
+                    <h3 style="font-size: 1rem; margin-bottom: 1rem; color: #374151;">Current Targets</h3>
+                    <div id="budgetsList" class="budgets-list">
+                        <div class="text-center" style="padding: 2rem; color: #6b7280;">
+                            <div class="loading" style="margin: 0 auto 0.5rem;"></div>
+                            Loading budget targets...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script src="/js/api.js"></script>
+    <script src="/js/settings.js"></script>
+</body>
+</html>
