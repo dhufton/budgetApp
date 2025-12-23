@@ -14,7 +14,7 @@ from analysis.charts import (
     create_monthly_trend_line,
     create_balance_trend_line,
 )
-from config import CATEGORY_RULES
+from src.config import CATEGORY_RULES
 from budgeting.categories import (
     get_user_categories,
     get_budget_targets,

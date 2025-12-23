@@ -1,13 +1,15 @@
 # api/auth.py
 from fastapi import Header, HTTPException
 from typing import Optional
+import sys
 import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from src.supabase_client import supabase
 
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
-    """Extract user_id from Supabase JWT token."""
     if not authorization:
         raise HTTPException(status_code=401, detail="Not authenticated")
 

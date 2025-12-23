@@ -31,10 +31,9 @@ async def get_transactions(
     if df.empty:
         return {"total": 0, "transactions": [], "latest_date": None}
 
-    # Get uncategorized count
     uncategorized_count = len(df[df["Category"] == "Uncategorized"])
-
     transactions = df.tail(limit).to_dict("records")
+
     return {
         "total": len(df),
         "transactions": transactions,
@@ -43,45 +42,14 @@ async def get_transactions(
     }
 
 
-@router.get("/transactions/uncategorized")
-async def get_uncategorized(user_id: str = Depends(get_current_user)):
-    """Get uncategorized transactions for review."""
-    if user_id not in _cache:
-        df = await load_statements(user_id)
-        _cache[user_id] = df
-    else:
-        df = _cache[user_id]
-
-    uncategorized = df[df["Category"] == "Uncategorized"].copy()
-    return uncategorized.to_dict("records")
-
-
-@router.post("/transactions/categorize")
-async def categorize_transaction(
-        description: str,
-        category: str,
-        user_id: str = Depends(get_current_user)
-):
-    """Save a categorization rule."""
-    save_learned_rule(description, category, user_id)
-
-    # Clear cache to force reload
-    if user_id in _cache:
-        del _cache[user_id]
-
-    return {"success": True}
-
-
 @router.post("/transactions/refresh")
 async def refresh_cache(user_id: str = Depends(get_current_user)):
-    """Clear cache to force reload."""
     if user_id in _cache:
         del _cache[user_id]
     return {"success": True}
 
 
 async def load_statements(user_id: str) -> pd.DataFrame:
-    """Load and parse all statements (replaces st.cache_data)."""
     paths = get_all_statement_paths(user_id)
     if not paths:
         return pd.DataFrame()

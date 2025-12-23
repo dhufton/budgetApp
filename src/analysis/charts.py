@@ -2,7 +2,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-from config import BUDGET_LIMITS
+from src.config import BUDGET_LIMITS
 
 def calculate_plot_data(df):
     """

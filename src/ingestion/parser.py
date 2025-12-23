@@ -3,7 +3,7 @@ import pdfplumber
 import re
 import pandas as pd
 import csv
-from config import CATEGORY_RULES
+from src.config import CATEGORY_RULES
 from ingestion.learning import load_learned_rules  # Ensure this import is updated
 
 

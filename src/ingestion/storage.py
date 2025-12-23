@@ -1,93 +1,51 @@
-# budgetApp/src/ingestion/storage.py
-import io
-import pandas as pd
-from src.supabase_client import supabase
-from src.storage.b2_client import (
-    upload_statement,
-    download_statement as b2_download_statement,
-    read_statement_csv,
-    delete_statement
+# src/ingestion/storage.py
+import os
+from typing import List, Optional
+
+from b2_client import (
+    upload_file_to_b2,
+    list_files_in_b2,
+    download_file_from_b2,
 )
 
-BUCKET_NAME = "statements"  # Still used for Supabase metadata reference
 
-def save_uploaded_file(uploaded_file, user_id: str):
-    """
-    Uploads file to B2 and returns storage_path.
-    Replaces Supabase Storage upload.
-    """
-    storage_path = f"{user_id}/{uploaded_file.name}"
-    file_bytes = uploaded_file.getvalue()
+def save_uploaded_file(file, user_id: str) -> str:
+    if hasattr(file, 'filename'):
+        filename = file.filename
+    elif hasattr(file, 'name'):
+        filename = file.name
+    else:
+        filename = "statement.pdf"
 
-    print("DEBUG storage_path:", storage_path)
-    print("DEBUG bytes_type:", type(file_bytes), "len:", len(file_bytes))
+    storage_path = f"{user_id}/{filename}"
 
-    # Upload to B2 (replaces supabase.storage.upload)
-    upload_statement(storage_path, file_bytes)
+    if hasattr(file, 'read'):
+        content = file.read()
+        if hasattr(file, 'seek'):
+            file.seek(0)
+    else:
+        content = file
 
+    if filename.lower().endswith('.pdf'):
+        content_type = 'application/pdf'
+    elif filename.lower().endswith('.csv'):
+        content_type = 'text/csv'
+    else:
+        content_type = 'application/octet-stream'
+
+    upload_file_to_b2(storage_path, content, content_type)
     return storage_path
 
-def get_all_statement_paths(user_id: str):
-    """
-    Queries Supabase metadata table instead of listing B2 bucket.
-    Assumes you have a 'statements' table with 'storage_key' column.
-    """
-    try:
-        # Query Supabase metadata table (RLS ensures user_id filter)
-        res = (
-            supabase.table("statements")
-            .select("storage_key")
-            .eq("user_id", user_id)
-            .execute()
-        )
-        return [row["storage_key"] for row in res.data] if res.data else []
-    except Exception as e:
-        print(f"Could not list statements for user {user_id}: {e}")
-        return []
 
-def download_statement(storage_path: str) -> bytes:
-    """
-    Downloads raw bytes from B2 storage_path.
-    Replaces supabase.storage.download.
-    """
+def get_all_statement_paths(user_id: str) -> List[str]:
+    prefix = f"{user_id}/"
+    files = list_files_in_b2(prefix)
+    return [f["fileName"] for f in files]
+
+
+def download_statement(storage_path: str) -> Optional[bytes]:
     try:
-        return b2_download_statement(storage_path)
+        return download_file_from_b2(storage_path)
     except Exception as e:
         print(f"Failed to download {storage_path}: {e}")
         return None
-
-def read_statement_csv(storage_path: str) -> pd.DataFrame:
-    """
-    Downloads CSV from B2 and returns as pandas DataFrame.
-    Convenience function for re-parsing statements.
-    """
-    try:
-        return read_statement_csv(storage_path)
-    except Exception as e:
-        print(f"Failed to read CSV from {storage_path}: {e}")
-        return pd.DataFrame()
-
-def delete_statement(storage_path: str):
-    """
-    Deletes file from B2 storage.
-    Use when removing statement metadata from Supabase.
-    """
-    try:
-        delete_statement(storage_path)
-    except Exception as e:
-        print(f"Failed to delete {storage_path}: {e}")
-
-
-# In storage.py - add this function
-def cleanup_duplicates(user_id: str):
-    """Keep only latest version of each filename."""
-    paths = get_all_statement_paths(user_id)
-    filenames = {}
-    for path in paths:
-        name = path.split("/")[-1]
-        filenames[name] = path  # Latest wins
-
-    for name, keep_path in filenames.items():
-        for path in paths:
-            if path != keep_path and path.split("/")[-1] == name:
-                delete_statement(path)
