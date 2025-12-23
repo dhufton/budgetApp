@@ -52,8 +52,9 @@
             if (error) {
                 showMessage(error.message, 'error');
             } else {
-                localStorage.setItem('token', data.session.access_token);
+                localStorage.setItem('access_token', data.session.access_token);
                 localStorage.setItem('user_email', email);
+                localStorage.setItem('user_id', data.user.id);
                 window.location.href = '/dashboard';
             }
         } catch (err) {
@@ -95,13 +96,14 @@
     };
 
     window.logout = function() {
-        localStorage.removeItem('token');
+        localStorage.removeItem('access_token');
         localStorage.removeItem('user_email');
+        localStorage.removeItem('user_id');
         window.location.href = '/';
     };
 
     window.checkAuth = async function() {
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('access_token');
         if (!token) {
             window.location.href = '/';
             return null;
