@@ -30,6 +30,7 @@ app.include_router(budget.router, prefix="/api", tags=["budget"])
 
 
 @app.get("/api/config")
+@app.head("/api/config")
 async def get_config():
     """Expose public Supabase config to frontend"""
     return {
@@ -38,17 +39,17 @@ async def get_config():
     }
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def root():
     return FileResponse("frontend/index.html")
 
 
-@app.get("/dashboard")
+@app.api_route("/dashboard", methods=["GET", "HEAD"])
 async def dashboard():
     return FileResponse("frontend/dashboard.html")
 
 
-@app.get("/settings")
+@app.api_route("/settings", methods=["GET", "HEAD"])
 async def settings():
     return FileResponse("frontend/settings.html")
 

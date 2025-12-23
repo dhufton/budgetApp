@@ -1,39 +1,65 @@
 // frontend/js/auth.js
 let supabase;
+let isInitialized = false;
 
 // Initialize Supabase from config endpoint
 async function initSupabase() {
-    const response = await fetch('/api/config');
-    const config = await response.json();
-    supabase = window.supabase.createClient(config.supabase_url, config.supabase_key);
+    try {
+        const response = await fetch('/api/config');
+        const config = await response.json();
+
+        if (!config.supabase_url || !config.supabase_key) {
+            console.error('Missing Supabase configuration');
+            showMessage('Configuration error. Please contact support.', 'error');
+            return;
+        }
+
+        supabase = window.supabase.createClient(config.supabase_url, config.supabase_key);
+        isInitialized = true;
+        console.log('Supabase initialized successfully');
+    } catch (error) {
+        console.error('Failed to initialize Supabase:', error);
+        showMessage('Failed to connect. Please refresh the page.', 'error');
+    }
 }
 
 // Initialize on page load
-initSupabase();
+document.addEventListener('DOMContentLoaded', initSupabase);
 
 function showLogin() {
     document.getElementById('loginForm').classList.remove('hidden');
     document.getElementById('registerForm').classList.add('hidden');
 
-    document.getElementById('loginTab').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
-    document.getElementById('loginTab').classList.remove('text-gray-500');
+    const loginTab = document.getElementById('loginTab');
+    const registerTab = document.getElementById('registerTab');
 
-    document.getElementById('registerTab').classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
-    document.getElementById('registerTab').classList.add('text-gray-500');
+    loginTab.classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+    loginTab.classList.remove('text-gray-500');
+
+    registerTab.classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+    registerTab.classList.add('text-gray-500');
 }
 
 function showRegister() {
     document.getElementById('loginForm').classList.add('hidden');
     document.getElementById('registerForm').classList.remove('hidden');
 
-    document.getElementById('registerTab').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
-    document.getElementById('registerTab').classList.remove('text-gray-500');
+    const loginTab = document.getElementById('loginTab');
+    const registerTab = document.getElementById('registerTab');
 
-    document.getElementById('loginTab').classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
-    document.getElementById('loginTab').classList.add('text-gray-500');
+    registerTab.classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+    registerTab.classList.remove('text-gray-500');
+
+    loginTab.classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+    loginTab.classList.add('text-gray-500');
 }
 
 async function login() {
+    if (!isInitialized) {
+        showMessage('Still loading... please wait', 'error');
+        return;
+    }
+
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
 
@@ -42,18 +68,27 @@ async function login() {
         return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-        showMessage(error.message, 'error');
-    } else {
-        localStorage.setItem('token', data.session.access_token);
-        localStorage.setItem('user_email', email);
-        window.location.href = '/dashboard';
+        if (error) {
+            showMessage(error.message, 'error');
+        } else {
+            localStorage.setItem('token', data.session.access_token);
+            localStorage.setItem('user_email', email);
+            window.location.href = '/dashboard';
+        }
+    } catch (err) {
+        showMessage('Login failed: ' + err.message, 'error');
     }
 }
 
 async function register() {
+    if (!isInitialized) {
+        showMessage('Still loading... please wait', 'error');
+        return;
+    }
+
     const email = document.getElementById('registerEmail').value;
     const password = document.getElementById('registerPassword').value;
 
@@ -67,13 +102,17 @@ async function register() {
         return;
     }
 
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    try {
+        const { data, error } = await supabase.auth.signUp({ email, password });
 
-    if (error) {
-        showMessage(error.message, 'error');
-    } else {
-        showMessage('Account created! Please check your email to confirm.', 'success');
-        setTimeout(() => showLogin(), 2000);
+        if (error) {
+            showMessage(error.message, 'error');
+        } else {
+            showMessage('Account created! Please check your email to confirm.', 'success');
+            setTimeout(() => showLogin(), 2000);
+        }
+    } catch (err) {
+        showMessage('Registration failed: ' + err.message, 'error');
     }
 }
 
