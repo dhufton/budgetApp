@@ -1,5 +1,6 @@
 # api/routes/upload.py
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi.responses import JSONResponse
 from io import BytesIO
 from datetime import datetime
 import sys
@@ -21,25 +22,38 @@ async def upload_statement(
         user_id: str = Depends(get_current_user)
 ):
     try:
+        # Check if file already exists
         existing_paths = set(get_all_statement_paths(user_id))
         storage_path = f"{user_id}/{file.filename}"
 
         if storage_path in existing_paths:
-            return {"success": False, "message": f"{file.filename} already exists"}
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "message": f"{file.filename} already exists"}
+            )
 
+        # Read file content
         content = await file.read()
         file_stream = BytesIO(content)
 
+        # Parse file
         if file.filename.lower().endswith(".pdf"):
-            df = ChaseStatementParser(user_id).parse(file_stream)
+            parser = ChaseStatementParser(user_id)
+            df = parser.parse(file_stream)
         elif file.filename.lower().endswith(".csv"):
-            df = AmexCSVParser(user_id).parse(file_stream)
+            parser = AmexCSVParser(user_id)
+            df = parser.parse(file_stream)
         else:
-            raise HTTPException(400, "Unsupported file type")
+            raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF or CSV")
 
+        if df.empty:
+            raise HTTPException(status_code=400, detail="No transactions found in file")
+
+        # Save to B2
         file_stream.seek(0)
-        saved_path = save_uploaded_file(file_stream, user_id=user_id)
+        saved_path = save_uploaded_file(file_stream, user_id)
 
+        # Save metadata to Supabase
         user_row = supabase.table("users").select("id").eq("id", user_id).execute()
         if not user_row:
             supabase.table("users").insert({
@@ -51,13 +65,16 @@ async def upload_statement(
             "user_id": user_id,
             "storage_key": saved_path,
             "file_name": file.filename,
+            "transactions_count": len(df),
             "uploaded_at": datetime.utcnow().isoformat(),
         }).execute()
 
         return {
             "success": True,
             "message": f"Uploaded {file.filename}",
-            "transactions": len(df)
+            "transactions": len(df),
+            "storage_path": saved_path
         }
     except Exception as e:
+        print(f"Upload error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

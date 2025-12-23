@@ -1,55 +1,65 @@
 # api/routes/transactions.py
-from fastapi import APIRouter, Depends, Query
-from io import BytesIO
-import pandas as pd
+from fastapi import APIRouter, Depends, Query, HTTPException
+from typing import Optional
 import sys
 import os
+from io import BytesIO
+import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.ingestion.storage import get_all_statement_paths, download_statement
 from src.ingestion.parser import ChaseStatementParser, AmexCSVParser
-from src.ingestion.learning import save_learned_rule
 from api.auth import get_current_user
 
 router = APIRouter()
 
+# Simple in-memory cache
 _cache = {}
 
 
 @router.get("/transactions")
 async def get_transactions(
         user_id: str = Depends(get_current_user),
-        limit: int = Query(1000, le=5000)
+        limit: int = Query(1000, le=5000),
+        refresh: bool = Query(False)
 ):
-    if user_id not in _cache:
+    cache_key = f"{user_id}_{refresh}"
+
+    if cache_key not in _cache:
         df = await load_statements(user_id)
-        _cache[user_id] = df
-    else:
-        df = _cache[user_id]
+        _cache[cache_key] = df.to_dict('records')
 
-    if df.empty:
-        return {"total": 0, "transactions": [], "latest_date": None}
+    transactions = _cache[cache_key]
 
-    uncategorized_count = len(df[df["Category"] == "Uncategorized"])
-    transactions = df.tail(limit).to_dict("records")
+    if not transactions:
+        return {
+            "total": 0,
+            "transactions": [],
+            "latest_date": None,
+            "uncategorized_count": 0
+        }
+
+    # Filter and limit
+    recent_transactions = transactions[:limit]
+    uncategorized_count = sum(1 for t in transactions if t.get("Category") == "Uncategorized")
 
     return {
-        "total": len(df),
-        "transactions": transactions,
-        "latest_date": df["Date"].max().strftime("%Y-%m-%d"),
+        "total": len(transactions),
+        "transactions": recent_transactions,
+        "latest_date": transactions[0]["Date"][:10] if transactions else None,
         "uncategorized_count": uncategorized_count
     }
 
 
 @router.post("/transactions/refresh")
 async def refresh_cache(user_id: str = Depends(get_current_user)):
-    if user_id in _cache:
-        del _cache[user_id]
-    return {"success": True}
+    _cache.clear()
+    return {"success": True, "message": "Cache cleared"}
 
 
 async def load_statements(user_id: str) -> pd.DataFrame:
+    """Load and parse all statements for a user"""
     paths = get_all_statement_paths(user_id)
     if not paths:
         return pd.DataFrame()
@@ -61,26 +71,30 @@ async def load_statements(user_id: str) -> pd.DataFrame:
     for storage_path in paths:
         content = download_statement(storage_path)
         if not content:
+            print(f"Failed to download {storage_path}")
             continue
 
-        file_name = storage_path.split("/")[-1]
+        filename = storage_path.split("/")[-1]
         file_stream = BytesIO(content)
 
         try:
-            if file_name.lower().endswith(".pdf"):
-                df_file = chase_parser.parse(file_stream)
-            elif file_name.lower().endswith(".csv"):
-                df_file = amex_parser.parse(file_stream)
+            if filename.lower().endswith(".pdf"):
+                df = chase_parser.parse(file_stream)
+            elif filename.lower().endswith(".csv"):
+                df = amex_parser.parse(file_stream)
             else:
+                print(f"Skipping unsupported file: {filename}")
                 continue
 
-            if not df_file.empty:
-                all_dfs.append(df_file)
+            if not df.empty:
+                all_dfs.append(df)
+                print(f"Parsed {len(df)} transactions from {filename}")
         except Exception as e:
-            print(f"Failed to parse {file_name}: {e}")
+            print(f"Failed to parse {filename}: {e}")
 
     if not all_dfs:
         return pd.DataFrame()
 
-    df = pd.concat(all_dfs, ignore_index=True).drop_duplicates()
-    return df.sort_values("Date", ascending=False)
+    combined_df = pd.concat(all_dfs, ignore_index=True)
+    combined_df = combined_df.drop_duplicates(subset=["Date", "Description", "Amount"])
+    return combined_df.sort_values("Date", ascending=False)

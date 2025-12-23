@@ -1,5 +1,5 @@
 # api/auth.py
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Depends
 from typing import Optional
 import sys
 import os
@@ -15,11 +15,12 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> str:
 
     try:
         token = authorization.replace("Bearer ", "")
-        user = supabase.auth.get_user(token)
+        response = supabase.auth.get_user(token)
 
-        if not user or not user.user:
+        if not response.user:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        return user.user.id
+        return response.user.id
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Auth error: {str(e)}")
+        print(f"Auth error: {str(e)}")
+        raise HTTPException(status_code=401, detail="Authentication failed")
