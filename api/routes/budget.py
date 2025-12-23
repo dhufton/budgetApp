@@ -1,82 +1,97 @@
 # api/routes/budget.py
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.budgeting.categories import (
-    get_budget_targets,
-    set_budget_target,
-    get_category_spending
-)
+from src.supabase_client import supabase
 from api.auth import get_current_user
-from api.routes.transactions import _cache, load_statements
 
 router = APIRouter()
 
 
-class BudgetTarget(BaseModel):
-    category_name: str
-    monthly_target: float
-
-
 @router.get("/budget-targets")
-async def get_targets(user_id: str = Depends(get_current_user)):
-    """Get all budget targets."""
-    df = get_budget_targets(user_id)
-    return df.to_dict("records") if not df.empty else []
+async def get_budget_targets(user_id: str = Depends(get_current_user)):
+    """Get budget targets for categories"""
+    try:
+        result = supabase.table("budget_targets") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        return {"targets": result.data or []}
+    except Exception as e:
+        print(f"[BUDGET] Error fetching targets: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/budget-targets")
-async def set_target(
-        budget: BudgetTarget,
+async def set_budget_target(
+        category: str,
+        target_amount: float,
         user_id: str = Depends(get_current_user)
 ):
-    """Set or update a budget target."""
-    set_budget_target(user_id, budget.category_name, budget.monthly_target)
-    return {"success": True}
+    """Set or update budget target for a category"""
+    try:
+        # Upsert budget target
+        result = supabase.table("budget_targets").upsert({
+            "user_id": user_id,
+            "category": category,
+            "target_amount": target_amount
+        }).execute()
+
+        return {"success": True, "data": result.data}
+    except Exception as e:
+        print(f"[BUDGET] Error setting target: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/budget-comparison")
 async def get_budget_comparison(user_id: str = Depends(get_current_user)):
-    """Get budget vs actual spending for current month."""
+    """Compare actual spending vs budget targets"""
+    try:
+        # Get budget targets
+        targets_result = supabase.table("budget_targets") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .execute()
 
-    # Load transactions
-    if user_id not in _cache:
-        df = await load_statements(user_id)
-        _cache[user_id] = df
-    else:
-        df = _cache[user_id]
+        targets = {t["category"]: t["target_amount"] for t in (targets_result.data or [])}
 
-    if df.empty:
-        return {"comparison": []}
+        # Get actual spending by category (current month)
+        from datetime import datetime
+        current_month = datetime.now().strftime('%Y-%m')
 
-    # Get latest month
-    latest_month = df["Date"].dt.to_period("M").max()
+        transactions_result = supabase.table("transactions") \
+            .select("category, amount") \
+            .eq("user_id", user_id) \
+            .gte("date", f"{current_month}-01") \
+            .lt("amount", 0) \
+            .execute()
 
-    # Get targets
-    targets_df = get_budget_targets(user_id)
-    if targets_df.empty:
-        return {"comparison": []}
+        # Calculate spending by category
+        spending = {}
+        for t in (transactions_result.data or []):
+            cat = t["category"]
+            spending[cat] = spending.get(cat, 0) + abs(float(t["amount"]))
 
-    # Get spending
-    spending_df = get_category_spending(df, latest_month)
+        # Build comparison
+        comparison = []
+        all_categories = set(targets.keys()) | set(spending.keys())
 
-    # Merge
-    comparison = targets_df.merge(
-        spending_df,
-        left_on="category_name",
-        right_on="Category",
-        how="left"
-    ).fillna(0)
+        for category in all_categories:
+            target = targets.get(category, 0)
+            actual = spending.get(category, 0)
+            comparison.append({
+                "category": category,
+                "target": target,
+                "actual": actual,
+                "remaining": target - actual,
+                "percentage": (actual / target * 100) if target > 0 else 0
+            })
 
-    comparison["spent"] = comparison["spent"].abs()
-    comparison["remaining"] = comparison["monthly_target"] - comparison["spent"]
-    comparison["percent_used"] = (comparison["spent"] / comparison["monthly_target"] * 100).round(1)
-
-    return {
-        "month": str(latest_month),
-        "comparison": comparison.to_dict("records")
-    }
+        return {"comparison": comparison}
+    except Exception as e:
+        print(f"[BUDGET] Error in comparison: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

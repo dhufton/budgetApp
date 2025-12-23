@@ -1,51 +1,53 @@
 # api/routes/categories.py
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 import sys
 import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.budgeting.categories import (
-    get_user_categories,
-    add_category,
-    delete_category
-)
+from src.supabase_client import supabase
 from api.auth import get_current_user
 
 router = APIRouter()
 
 
-class CategoryCreate(BaseModel):
-    name: str
-
-
 @router.get("/categories")
 async def get_categories(user_id: str = Depends(get_current_user)):
-    """Get all user categories."""
-    categories = get_user_categories(user_id)
-    return {"categories": sorted(categories)}
+    """Get all unique categories from user's transactions"""
+    try:
+        result = supabase.table("transactions") \
+            .select("category") \
+            .eq("user_id", user_id) \
+            .execute()
+
+        categories = list(set(t["category"] for t in (result.data or [])))
+
+        return {"categories": sorted(categories)}
+    except Exception as e:
+        print(f"[CATEGORIES] Error: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/categories")
-async def create_category(
-        category: CategoryCreate,
+@router.put("/transactions/{transaction_id}/category")
+async def update_category(
+        transaction_id: str,
+        new_category: str,
         user_id: str = Depends(get_current_user)
 ):
-    """Add a new category."""
-    existing = get_user_categories(user_id)
-    if category.name in existing:
-        raise HTTPException(400, "Category already exists")
+    """Update category for a specific transaction"""
+    try:
+        result = supabase.table("transactions") \
+            .update({"category": new_category}) \
+            .eq("id", transaction_id) \
+            .eq("user_id", user_id) \
+            .execute()
 
-    add_category(user_id, category.name)
-    return {"success": True, "message": f"Added '{category.name}'"}
+        if not result:
+            raise HTTPException(status_code=404, detail="Transaction not found")
 
-
-@router.delete("/categories/{category_name}")
-async def remove_category(
-        category_name: str,
-        user_id: str = Depends(get_current_user)
-):
-    """Delete a category."""
-    delete_category(user_id, category_name)
-    return {"success": True, "message": f"Deleted '{category_name}'"}
+        return {"success": True, "data": result.data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CATEGORIES] Error updating: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
