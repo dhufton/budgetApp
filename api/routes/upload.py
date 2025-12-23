@@ -9,7 +9,7 @@ import traceback
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.supabase_client import supabase
+from src.supabase_client import supabase, supabase_admin  # Import both
 from src.ingestion.storage import save_uploaded_file, get_all_statement_paths
 from src.ingestion.parser import ChaseStatementParser, AmexCSVParser
 from api.auth import get_current_user
@@ -58,22 +58,23 @@ async def upload_statement(
         if df.empty:
             raise HTTPException(status_code=400, detail="No transactions found in file")
 
-        # Save to storage - add filename attribute
+        # Save to storage
         file_stream.seek(0)
         file_stream.filename = file.filename
         saved_path = save_uploaded_file(file_stream, user_id)
         print(f"[UPLOAD] saved to storage at {saved_path}")
 
+        # Use admin client for database operations (bypasses RLS)
         # Ensure user row exists
-        user_row = supabase.table("users").select("id").eq("id", user_id).execute()
+        user_row = supabase_admin.table("users").select("id").eq("id", user_id).execute()
         if not user_row:
             print(f"[UPLOAD] inserting new user record {user_id}")
-            supabase.table("users").insert(
+            supabase_admin.table("users").insert(
                 {"id": user_id, "username": "user"}
             ).execute()
 
         # Insert statement metadata
-        statement_result = supabase.table("statements").insert(
+        statement_result = supabase_admin.table("statements").insert(
             {
                 "user_id": user_id,
                 "storage_key": saved_path,
@@ -85,7 +86,7 @@ async def upload_statement(
         statement_id = statement_result.data[0]["id"] if statement_result.data else None
         print(f"[UPLOAD] created statement record: {statement_id}")
 
-        # **NEW: Store parsed transactions in database**
+        # Store parsed transactions in database
         transactions_to_insert = []
         for _, row in df.iterrows():
             transactions_to_insert.append({
@@ -97,10 +98,10 @@ async def upload_statement(
                 "category": str(row.get("Category", "Uncategorized")),
             })
 
-        # Batch insert transactions
+        # Batch insert transactions using admin client
         if transactions_to_insert:
             print(f"[UPLOAD] inserting {len(transactions_to_insert)} transactions into database")
-            supabase.table("transactions").insert(transactions_to_insert).execute()
+            supabase_admin.table("transactions").insert(transactions_to_insert).execute()
             print("[UPLOAD] transactions stored in database")
 
         print("[UPLOAD] completed successfully")
