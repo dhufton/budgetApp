@@ -5,7 +5,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from supabase_client import supabase
+from src.supabase_client import supabase
 from ingestion.storage import save_uploaded_file, get_all_statement_paths, download_statement
 from ingestion.learning import save_learned_rule
 from ingestion.parser import ChaseStatementParser, AmexCSVParser

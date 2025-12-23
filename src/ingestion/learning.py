@@ -1,5 +1,5 @@
 # budgetApp/src/ingestion/learning.py
-from supabase_client import supabase
+from src.supabase_client import supabase
 
 def load_learned_rules(user_id: str) -> dict:
     """

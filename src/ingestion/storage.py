@@ -1,7 +1,7 @@
 # budgetApp/src/ingestion/storage.py
 import io
 import pandas as pd
-from supabase_client import supabase
+from src.upabase_client import supabase
 from storage.b2_client import (
     upload_statement,
     download_statement as b2_download_statement,

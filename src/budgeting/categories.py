@@ -1,5 +1,5 @@
 # budgetApp/src/budgeting/categories.py
-from supabase_client import supabase
+from src.supabase_client import supabase
 from typing import List, Dict
 import pandas as pd
 
