@@ -49,7 +49,9 @@ async function loadTransactions() {
 function renderTransactions() {
     const tbody = document.getElementById('transactionsBody');
 
-    if (allTransactions.length === 0) {
+    console.log('Rendering transactions:', allTransactions); // Debug log
+
+    if (!allTransactions || allTransactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color: #6b7280; padding: 2rem;">No transactions found. Upload a statement to get started!</td></tr>';
         return;
     }
@@ -57,9 +59,9 @@ function renderTransactions() {
     // Filter transactions based on current filter
     let filteredTransactions = allTransactions;
     if (currentFilter === 'uncategorized') {
-        filteredTransactions = allTransactions.filter(t => t.category === 'Uncategorized');
+        filteredTransactions = allTransactions.filter(t => (t.category || 'Uncategorized') === 'Uncategorized');
     } else if (currentFilter === 'categorized') {
-        filteredTransactions = allTransactions.filter(t => t.category !== 'Uncategorized');
+        filteredTransactions = allTransactions.filter(t => (t.category || 'Uncategorized') !== 'Uncategorized');
     }
 
     if (filteredTransactions.length === 0) {
@@ -68,22 +70,29 @@ function renderTransactions() {
     }
 
     const html = filteredTransactions.map(t => {
-        const isUncategorized = t.category === 'Uncategorized';
-        const amount = parseFloat(t.amount);
+        console.log('Processing transaction:', t); // Debug log for each transaction
+
+        const id = t.id || '';
+        const date = t.date || t.transaction_date || '';
+        const description = t.description || t.merchant || t.details || 'No description';
+        const category = t.category || 'Uncategorized';
+        const amount = parseFloat(t.amount) || 0;
+
+        const isUncategorized = category === 'Uncategorized';
         const amountClass = amount >= 0 ? 'amount-positive' : 'amount-negative';
 
         return `
-            <tr class="${isUncategorized ? 'uncategorized-row' : ''}" data-id="${t.id}">
-                <td>${formatDate(t.date)}</td>
-                <td>${escapeHtml(t.description)}</td>
+            <tr class="${isUncategorized ? 'uncategorized-row' : ''}" data-id="${id}">
+                <td>${formatDate(date)}</td>
+                <td>${escapeHtml(description)}</td>
                 <td>
                     <select
                         class="category-select ${isUncategorized ? 'uncategorized' : ''}"
-                        data-transaction-id="${t.id}"
-                        onchange="updateCategory('${t.id}', this.value, this)"
+                        data-transaction-id="${id}"
+                        onchange="updateCategory('${id}', this.value, this)"
                     >
                         ${allCategories.map(cat =>
-                            `<option value="${escapeHtml(cat)}" ${cat === t.category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
+                            `<option value="${escapeHtml(cat)}" ${cat === category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
                         ).join('')}
                     </select>
                 </td>
@@ -97,6 +106,7 @@ function renderTransactions() {
     // Update pagination info
     updatePaginationInfo(filteredTransactions.length, allTransactions.length);
 }
+
 
 async function updateCategory(transactionId, newCategory, selectElement) {
     const row = selectElement.closest('tr');
