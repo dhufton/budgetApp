@@ -20,10 +20,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-try:
-    app.mount("/static", StaticFiles(directory="frontend"), name="static")
-except RuntimeError:
-    pass
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
@@ -33,7 +30,17 @@ app.include_router(budget.router, prefix="/api", tags=["budget"])
 
 @app.get("/")
 async def root():
-    return {"message": "Budget Tracker API", "version": "1.0.0"}
+    return FileResponse("frontend/index.html")
+
+
+@app.get("/dashboard")
+async def dashboard():
+    return FileResponse("frontend/dashboard.html")
+
+
+@app.get("/settings")
+async def settings():
+    return FileResponse("frontend/settings.html")
 
 
 @app.get("/health")

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Budget Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="w-64 bg-white shadow-lg">
+            <div class="p-6">
+                <h1 class="text-2xl font-bold text-gray-800">💰 Budget Tracker</h1>
+                <p class="text-sm text-gray-600 mt-1" id="userEmail"></p>
+            </div>
+
+            <nav class="mt-6">
+                <a href="/dashboard" class="flex items-center px-6 py-3 bg-blue-50 text-blue-600 border-r-4 border-blue-600">
+                    <span class="text-xl mr-3">📊</span>
+                    <span class="font-semibold">Dashboard</span>
+                </a>
+                <a href="/settings" class="flex items-center px-6 py-3 text-gray-700 hover:bg-gray-50">
+                    <span class="text-xl mr-3">⚙️</span>
+                    <span class="font-semibold">Settings</span>
+                </a>
+            </nav>
+
+            <div class="absolute bottom-0 w-64 p-6">
+                <button onclick="logout()" class="w-full bg-red-50 text-red-600 py-2 rounded-lg font-semibold hover:bg-red-100 transition">
+                    🚪 Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="flex-1 overflow-y-auto">
+            <div class="p-8">
+                <!-- Upload Section -->
+                <div class="bg-white rounded-lg shadow p-6 mb-6">
+                    <h2 class="text-xl font-bold mb-4">📁 Upload Statements</h2>
+                    <div class="flex gap-4">
+                        <input type="file" id="fileInput" accept=".pdf,.csv" multiple
+                            class="flex-1 border border-gray-300 rounded-lg p-2">
+                        <button onclick="uploadFiles()"
+                            class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700">
+                            Upload
+                        </button>
+                    </div>
+                    <div id="uploadStatus" class="mt-2 text-sm"></div>
+                </div>
+
+                <!-- Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="text-sm text-gray-600 mb-1">Total Transactions</div>
+                        <div class="text-3xl font-bold text-gray-800" id="totalTransactions">-</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="text-sm text-gray-600 mb-1">Total Spent</div>
+                        <div class="text-3xl font-bold text-red-600" id="totalSpent">-</div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <div class="text-sm text-gray-600 mb-1">Net Saved</div>
+                        <div class="text-3xl font-bold text-green-600" id="netSaved">-</div>
+                    </div>
+                </div>
+
+                <!-- Uncategorized Alert -->
+                <div id="uncategorizedAlert" class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 hidden">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="font-semibold text-yellow-800">⚠️ Uncategorized Transactions</p>
+                            <p class="text-yellow-700 text-sm" id="uncategorizedCount"></p>
+                        </div>
+                        <button onclick="showCategorization()" class="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700">
+                            Review
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Charts -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-bold mb-4">Spending by Category</h3>
+                        <div id="pieChart"></div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-bold mb-4">Monthly Trend</h3>
+                        <div id="lineChart"></div>
+                    </div>
+                </div>
+
+                <!-- Transactions Table -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-bold mb-4">Recent Transactions</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="text-left py-3 px-4 font-semibold text-gray-700">Date</th>
+                                    <th class="text-left py-3 px-4 font-semibold text-gray-700">Description</th>
+                                    <th class="text-left py-3 px-4 font-semibold text-gray-700">Category</th>
+                                    <th class="text-right py-3 px-4 font-semibold text-gray-700">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactionsTable">
+                                <tr>
+                                    <td colspan="4" class="text-center py-8 text-gray-500">Loading...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
