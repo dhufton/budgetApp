@@ -1,26 +1,46 @@
 // frontend/js/auth.js
-const SUPABASE_URL = 'YOUR_SUPABASE_URL';
-const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
+let supabase;
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Initialize Supabase from config endpoint
+async function initSupabase() {
+    const response = await fetch('/api/config');
+    const config = await response.json();
+    supabase = window.supabase.createClient(config.supabase_url, config.supabase_key);
+}
+
+// Initialize on page load
+initSupabase();
 
 function showLogin() {
     document.getElementById('loginForm').classList.remove('hidden');
     document.getElementById('registerForm').classList.add('hidden');
+
     document.getElementById('loginTab').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+    document.getElementById('loginTab').classList.remove('text-gray-500');
+
     document.getElementById('registerTab').classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+    document.getElementById('registerTab').classList.add('text-gray-500');
 }
 
 function showRegister() {
     document.getElementById('loginForm').classList.add('hidden');
     document.getElementById('registerForm').classList.remove('hidden');
+
     document.getElementById('registerTab').classList.add('border-b-2', 'border-blue-600', 'text-blue-600');
+    document.getElementById('registerTab').classList.remove('text-gray-500');
+
     document.getElementById('loginTab').classList.remove('border-b-2', 'border-blue-600', 'text-blue-600');
+    document.getElementById('loginTab').classList.add('text-gray-500');
 }
 
 async function login() {
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        showMessage('Please enter email and password', 'error');
+        return;
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
@@ -37,12 +57,23 @@ async function register() {
     const email = document.getElementById('registerEmail').value;
     const password = document.getElementById('registerPassword').value;
 
+    if (!email || !password) {
+        showMessage('Please enter email and password', 'error');
+        return;
+    }
+
+    if (password.length < 6) {
+        showMessage('Password must be at least 6 characters', 'error');
+        return;
+    }
+
     const { data, error } = await supabase.auth.signUp({ email, password });
 
     if (error) {
         showMessage(error.message, 'error');
     } else {
         showMessage('Account created! Please check your email to confirm.', 'success');
+        setTimeout(() => showLogin(), 2000);
     }
 }
 

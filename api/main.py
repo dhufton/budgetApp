@@ -20,12 +20,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
+app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
 
 app.include_router(upload.router, prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
 app.include_router(budget.router, prefix="/api", tags=["budget"])
+
+
+@app.get("/api/config")
+async def get_config():
+    """Expose public Supabase config to frontend"""
+    return {
+        "supabase_url": os.environ.get("SUPABASE_URL"),
+        "supabase_key": os.environ.get("SUPABASE_ANON_KEY")
+    }
 
 
 @app.get("/")
