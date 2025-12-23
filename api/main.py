@@ -62,6 +62,10 @@ async def dashboard():
 async def settings():
     return FileResponse("frontend/settings.html")
 
+@app.api_route("/transactions", methods=["GET", "HEAD"])
+async def transactions():
+    return FileResponse("frontend/transactions.html")
+
 
 @app.get("/health")
 async def health_check():
