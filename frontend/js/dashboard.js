@@ -3,7 +3,7 @@ let allTransactions = [];
 let isLoading = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = await window.checkAuth();  // ← Add window.
+    const token = await window.checkAuth();
     if (!token) {
         console.error('No valid auth, redirecting');
         return;
@@ -32,34 +32,63 @@ window.uploadFiles = async function() {
     status.className = 'mt-2 text-sm text-blue-600';
 
     let successCount = 0;
+    let duplicateCount = 0;
+    let errorCount = 0;
 
     for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+
         try {
-            const result = await uploadFile(file);
+            const result = await api.uploadFile(formData);
+
             if (result.success) {
                 successCount++;
                 status.textContent = `✅ Uploaded ${successCount}/${files.length} files`;
                 status.className = 'mt-2 text-sm text-green-600';
-            } else {
-                status.textContent = `❌ Failed: ${result.message}`;
-                status.className = 'mt-2 text-sm text-red-600';
             }
         } catch (error) {
-            status.textContent = `❌ Failed: ${error.message}`;
-            status.className = 'mt-2 text-sm text-red-600';
+            console.error('Upload error:', error);
+
+            // Handle duplicate file (409 error)
+            if (error.message && error.message.includes('already exists')) {
+                duplicateCount++;
+                status.textContent = `⚠️ ${file.name} already uploaded (skipping)`;
+                status.className = 'mt-2 text-sm text-yellow-600';
+            } else {
+                // Handle other errors
+                errorCount++;
+                status.textContent = `❌ Error uploading ${file.name}: ${error.message}`;
+                status.className = 'mt-2 text-sm text-red-600';
+            }
         }
     }
 
     // Clear file input
     input.value = '';
 
-    // Reload dashboard after 1 second
+    // Show final status
+    let finalMessage = '';
     if (successCount > 0) {
-        status.textContent = `✅ Successfully uploaded ${successCount} file(s). Refreshing...`;
+        finalMessage += `✅ ${successCount} file(s) uploaded`;
+    }
+    if (duplicateCount > 0) {
+        finalMessage += (finalMessage ? ', ' : '') + `⚠️ ${duplicateCount} duplicate(s) skipped`;
+    }
+    if (errorCount > 0) {
+        finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
+    }
+
+    status.textContent = finalMessage + '. Refreshing...';
+    status.className = successCount > 0 ? 'mt-2 text-sm text-green-600' : 'mt-2 text-sm text-yellow-600';
+
+    // Reload dashboard after successful uploads
+    if (successCount > 0) {
         setTimeout(async () => {
             showLoading(true);
             await loadDashboard();
             showLoading(false);
+            status.textContent = finalMessage;
         }, 1000);
     }
 };
@@ -80,7 +109,7 @@ function showLoading(loading) {
 async function loadDashboard() {
     try {
         console.log('Loading dashboard data...');
-        const data = await getTransactions();
+        const data = await api.getTransactions();
 
         if (!data) {
             console.error('No data returned from /transactions');

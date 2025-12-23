@@ -5,7 +5,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
-from src.supabase_client import supabase
+from src.supabase_client import supabase_admin
 from api.auth import get_current_user
 
 router = APIRouter()
@@ -15,7 +15,7 @@ router = APIRouter()
 async def get_categories(user_id: str = Depends(get_current_user)):
     """Get all unique categories from user's transactions"""
     try:
-        result = supabase.table("transactions") \
+        result = supabase_admin.table("transactions") \
             .select("category") \
             .eq("user_id", user_id) \
             .execute()
@@ -36,7 +36,7 @@ async def update_category(
 ):
     """Update category for a specific transaction"""
     try:
-        result = supabase.table("transactions") \
+        result = supabase_admin.table("transactions") \
             .update({"category": new_category}) \
             .eq("id", transaction_id) \
             .eq("user_id", user_id) \

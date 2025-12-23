@@ -81,6 +81,11 @@ async function uploadFile(file) {
             return null;
         }
 
+        if (response.status === 409) {
+            const data = await response.json();
+            throw new Error(data.message || 'File already exists');
+    }
+
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
             const data = await response.json();
