@@ -2,10 +2,14 @@
 let allTransactions = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await checkAuth();
+    const token = await checkAuth();
+    if (!token) {
+        console.error('No valid auth, redirecting');
+        return;
+    }
 
     const email = localStorage.getItem('user_email');
-    document.getElementById('userEmail').textContent = email;
+    document.getElementById('userEmail').textContent = email || 'User';
 
     await loadDashboard();
 });
