@@ -16,6 +16,22 @@ class UpdateCategoryRequest(BaseModel):
     category: str
 
 
+@router.get("/transactions")
+async def get_transactions(user_id: str = Depends(get_current_user)):
+    """Get all transactions for the authenticated user"""
+    try:
+        result = supabase_admin.table("transactions") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .order("date", desc=True) \
+            .execute()
+
+        return {"transactions": result.data or []}
+    except Exception as e:
+        print(f"[TRANSACTIONS] Error fetching: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.patch("/transactions/{transaction_id}/category")
 async def update_transaction_category(
     transaction_id: str,
