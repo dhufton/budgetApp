@@ -1,5 +1,6 @@
 // frontend/js/dashboard.js
 let allTransactions = [];
+let isLoading = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await checkAuth();
@@ -11,17 +12,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     const email = localStorage.getItem('user_email');
     document.getElementById('userEmail').textContent = email || 'User';
 
+    // Show loading state
+    showLoading(true);
     await loadDashboard();
+    showLoading(false);
 });
+
+function showLoading(loading) {
+    isLoading = loading;
+    const transactionsTable = document.getElementById('transactionsTable');
+    const pieChart = document.getElementById('pieChart');
+    const lineChart = document.getElementById('lineChart');
+
+    if (loading) {
+        transactionsTable.innerHTML = '<tr><td colspan="4" class="text-center py-8"><div class="animate-pulse">Loading transactions...</div></td></tr>';
+        pieChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
+        lineChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
+    }
+}
 
 async function loadDashboard() {
     try {
+        console.log('Loading dashboard data...');
         const data = await getTransactions();
 
         if (!data) {
             console.error('No data returned from /transactions');
+            showEmptyState();
             return;
         }
+
+        console.log(`Loaded ${data.total} transactions`);
 
         allTransactions = data.transactions || [];
 
@@ -31,16 +52,66 @@ async function loadDashboard() {
             document.getElementById('uncategorizedAlert').classList.remove('hidden');
             document.getElementById('uncategorizedCount').textContent =
                 `${data.uncategorized_count} transactions need categorization`;
+        } else {
+            document.getElementById('uncategorizedAlert').classList.add('hidden');
         }
 
-        calculateMetrics();
-        renderPieChart();
-        renderLineChart();
-        renderTransactionsTable();
+        if (allTransactions.length === 0) {
+            showEmptyState();
+        } else {
+            calculateMetrics();
+            renderPieChart();
+            renderLineChart();
+            renderTransactionsTable();
+        }
     } catch (error) {
         console.error('Failed to load dashboard:', error);
-        alert('Failed to load transactions. Please refresh the page.');
+        showErrorState(error.message);
     }
+}
+
+function showEmptyState() {
+    document.getElementById('totalTransactions').textContent = '0';
+    document.getElementById('totalSpent').textContent = '£0';
+    document.getElementById('netSaved').textContent = '£0';
+
+    const tbody = document.getElementById('transactionsTable');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="4" class="text-center py-12">
+                <div class="text-gray-400 mb-4">
+                    <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <p class="text-gray-600 font-medium mb-2">No transactions yet</p>
+                <p class="text-gray-500 text-sm">Upload a bank statement to get started!</p>
+            </td>
+        </tr>
+    `;
+
+    document.getElementById('pieChart').innerHTML = '<p class="text-gray-500 text-center py-8">Upload a statement to see spending breakdown</p>';
+    document.getElementById('lineChart').innerHTML = '<p class="text-gray-500 text-center py-8">Upload a statement to see monthly trends</p>';
+}
+
+function showErrorState(message) {
+    const tbody = document.getElementById('transactionsTable');
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="4" class="text-center py-12">
+                <div class="text-red-400 mb-4">
+                    <svg class="mx-auto h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                </div>
+                <p class="text-red-600 font-medium mb-2">Failed to load data</p>
+                <p class="text-gray-500 text-sm">${message}</p>
+                <button onclick="loadDashboard()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                    Retry
+                </button>
+            </td>
+        </tr>
+    `;
 }
 
 function calculateMetrics() {
@@ -74,13 +145,15 @@ function renderPieChart() {
         labels: Object.keys(categoryTotals),
         type: 'pie',
         marker: {
-            colors: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+            colors: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
         }
     }];
 
     const layout = {
         height: 300,
-        margin: { t: 0, b: 0, l: 0, r: 0 }
+        margin: { t: 0, b: 0, l: 0, r: 0 },
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.2 }
     };
 
     Plotly.newPlot('pieChart', data, layout, {responsive: true});
@@ -108,7 +181,9 @@ function renderLineChart() {
         type: 'scatter',
         mode: 'lines+markers',
         line: { color: '#3b82f6', width: 3 },
-        marker: { size: 8 }
+        marker: { size: 8 },
+        fill: 'tozeroy',
+        fillcolor: 'rgba(59, 130, 246, 0.1)'
     }];
 
     const layout = {
@@ -162,11 +237,14 @@ async function uploadFiles() {
     status.textContent = 'Uploading...';
     status.className = 'mt-2 text-sm text-blue-600';
 
+    let successCount = 0;
+
     for (const file of files) {
         try {
             const result = await uploadFile(file);
             if (result.success) {
-                status.textContent = `✅ Uploaded ${file.name}`;
+                successCount++;
+                status.textContent = `✅ Uploaded ${successCount}/${files.length} files`;
                 status.className = 'mt-2 text-sm text-green-600';
             } else {
                 status.textContent = `❌ Failed: ${result.message}`;
@@ -178,6 +256,16 @@ async function uploadFiles() {
         }
     }
 
-    // Reload after 1 second
-    setTimeout(() => loadDashboard(), 1000);
+    // Clear file input
+    input.value = '';
+
+    // Reload dashboard after 1 second
+    if (successCount > 0) {
+        status.textContent = `✅ Successfully uploaded ${successCount} file(s). Refreshing...`;
+        setTimeout(async () => {
+            showLoading(true);
+            await loadDashboard();
+            showLoading(false);
+        }, 1000);
+    }
 }
