@@ -1,7 +1,13 @@
 // frontend/js/dashboard.js
+
+// Global state
 let allTransactions = [];
+let allCategories = [];
+let filteredTransactions = [];
+let currentSort = { column: 'date', direction: 'desc' };
 let isLoading = false;
 
+// Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
     if (!token) {
@@ -12,14 +18,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const email = localStorage.getItem('user_email');
     document.getElementById('userEmail').textContent = email || 'User';
 
-    // Show loading state
     showLoading(true);
     await loadCategories();
     await loadDashboard();
     showLoading(false);
 });
 
-
+// File upload handler
 window.uploadFiles = async function() {
     const input = document.getElementById('fileInput');
     const files = input.files;
@@ -52,13 +57,11 @@ window.uploadFiles = async function() {
         } catch (error) {
             console.error('Upload error:', error);
 
-            // Handle duplicate file (409 error)
             if (error.message && error.message.includes('already exists')) {
                 duplicateCount++;
                 status.textContent = `⚠️ ${file.name} already uploaded (skipping)`;
                 status.className = 'mt-2 text-sm text-yellow-600';
             } else {
-                // Handle other errors
                 errorCount++;
                 status.textContent = `❌ Error uploading ${file.name}: ${error.message}`;
                 status.className = 'mt-2 text-sm text-red-600';
@@ -66,25 +69,16 @@ window.uploadFiles = async function() {
         }
     }
 
-    // Clear file input
     input.value = '';
 
-    // Show final status
     let finalMessage = '';
-    if (successCount > 0) {
-        finalMessage += `✅ ${successCount} file(s) uploaded`;
-    }
-    if (duplicateCount > 0) {
-        finalMessage += (finalMessage ? ', ' : '') + `⚠️ ${duplicateCount} duplicate(s) skipped`;
-    }
-    if (errorCount > 0) {
-        finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
-    }
+    if (successCount > 0) finalMessage += `✅ ${successCount} file(s) uploaded`;
+    if (duplicateCount > 0) finalMessage += (finalMessage ? ', ' : '') + `⚠️ ${duplicateCount} duplicate(s) skipped`;
+    if (errorCount > 0) finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
 
     status.textContent = finalMessage + '. Refreshing...';
     status.className = successCount > 0 ? 'mt-2 text-sm text-green-600' : 'mt-2 text-sm text-yellow-600';
 
-    // Reload dashboard after successful uploads
     if (successCount > 0) {
         setTimeout(async () => {
             showLoading(true);
@@ -95,19 +89,19 @@ window.uploadFiles = async function() {
     }
 };
 
-function showLoading(loading) {
-    isLoading = loading;
-    const transactionsTable = document.getElementById('transactionsTable');
-    const pieChart = document.getElementById('pieChart');
-    const lineChart = document.getElementById('lineChart');
-
-    if (loading) {
-        transactionsTable.innerHTML = '<tr><td colspan="4" class="text-center py-8"><div class="animate-pulse">Loading transactions...</div></td></tr>';
-        pieChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
-        lineChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
+// Load categories from API
+async function loadCategories() {
+    try {
+        const data = await api.getCategories();
+        allCategories = data.categories || ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        console.log('Loaded categories:', allCategories);
+    } catch (error) {
+        console.error('Failed to load categories:', error);
+        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
     }
 }
 
+// Load dashboard data
 async function loadDashboard() {
     try {
         console.log('Loading dashboard data...');
@@ -120,10 +114,10 @@ async function loadDashboard() {
         }
 
         allTransactions = data.transactions;
+        filteredTransactions = [...allTransactions];
         console.log(`Loaded ${allTransactions.length} transactions`);
 
         const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
-
         document.getElementById('totalTransactions').textContent = allTransactions.length.toLocaleString();
 
         if (uncategorizedCount > 0) {
@@ -137,11 +131,12 @@ async function loadDashboard() {
         if (allTransactions.length === 0) {
             showEmptyState();
         } else {
+            populateCategoryFilter();
             calculateMetrics();
             renderPieChart();
             renderLineChart();
             renderCategorySpendingChart();
-            renderTransactionsTable();
+            sortTable('date');
         }
     } catch (error) {
         console.error('Failed to load dashboard:', error);
@@ -149,6 +144,21 @@ async function loadDashboard() {
     }
 }
 
+// Show loading indicators
+function showLoading(loading) {
+    isLoading = loading;
+    const transactionsTable = document.getElementById('transactionsTable');
+    const pieChart = document.getElementById('pieChart');
+    const lineChart = document.getElementById('lineChart');
+
+    if (loading) {
+        if (transactionsTable) transactionsTable.innerHTML = '<tr><td colspan="4" class="text-center py-8"><div class="animate-pulse">Loading transactions...</div></td></tr>';
+        if (pieChart) pieChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
+        if (lineChart) lineChart.innerHTML = '<div class="text-center py-8 text-gray-500">Loading...</div>';
+    }
+}
+
+// Show empty state
 function showEmptyState() {
     document.getElementById('totalTransactions').textContent = '0';
     document.getElementById('totalSpent').textContent = '£0';
@@ -173,20 +183,7 @@ function showEmptyState() {
     document.getElementById('lineChart').innerHTML = '<p class="text-gray-500 text-center py-8">Upload a statement to see monthly trends</p>';
 }
 
-let allCategories = [];
-
-async function loadCategories() {
-    try {
-        const data = await api.getCategories();
-        allCategories = data.categories || ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
-        console.log('Loaded categories:', allCategories);
-    } catch (error) {
-        console.error('Failed to load categories:', error);
-        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
-    }
-}
-
-
+// Show error state
 function showErrorState(message) {
     const tbody = document.getElementById('transactionsTable');
     tbody.innerHTML = `
@@ -207,6 +204,7 @@ function showErrorState(message) {
     `;
 }
 
+// Calculate metrics
 function calculateMetrics() {
     const spent = allTransactions
         .filter(t => t.amount < 0 && t.category !== 'Savings')
@@ -220,14 +218,15 @@ function calculateMetrics() {
     document.getElementById('netSaved').textContent = `£${saved.toFixed(0)}`;
 }
 
+// Render pie chart
 function renderPieChart() {
+    const chartDiv = document.getElementById('pieChart');
     if (!allTransactions.length) {
-        document.getElementById('pieChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        chartDiv.innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
         return;
     }
 
     const categoryTotals = {};
-
     allTransactions.filter(t => t.amount < 0).forEach(t => {
         const cat = t.category || 'Uncategorized';
         categoryTotals[cat] = (categoryTotals[cat] || 0) + Math.abs(t.amount);
@@ -252,197 +251,123 @@ function renderPieChart() {
     Plotly.newPlot('pieChart', data, layout, {responsive: true});
 }
 
+// Render line chart (total spending per month)
 function renderLineChart() {
+    const chartDiv = document.getElementById('lineChart');
     if (!allTransactions.length) {
-        document.getElementById('lineChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        chartDiv.innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
         return;
     }
 
-    // Group by month and category
     const monthlyData = {};
-
     allTransactions.filter(t => t.amount < 0).forEach(t => {
-        const month = t.date.substring(0, 7); // YYYY-MM
-        const cat = t.category || 'Uncategorized';
-
-        if (!monthlyData[month]) {
-            monthlyData[month] = {};
-        }
-        if (!monthlyData[month][cat]) {
-            monthlyData[month][cat] = 0;
-        }
-        monthlyData[month][cat] += Math.abs(t.amount);
+        const month = t.date.substring(0, 7);
+        monthlyData[month] = (monthlyData[month] || 0) + Math.abs(t.amount);
     });
 
     const months = Object.keys(monthlyData).sort();
-    const categories = [...new Set(allTransactions.map(t => t.category))];
+    const values = months.map(m => monthlyData[m]);
 
-    // Create a line for each category
-    const traces = categories.map((cat, idx) => {
-        const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
-
-        return {
-            x: months,
-            y: months.map(m => monthlyData[m][cat] || 0),
-            type: 'scatter',
-            mode: 'lines+markers',
-            name: cat,
-            line: { color: colors[idx % colors.length], width: 2 },
-            marker: { size: 6 }
-        };
-    });
+    const data = [{
+        x: months,
+        y: values,
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#3b82f6', width: 3 },
+        marker: { size: 8 },
+        fill: 'tozeroy',
+        fillcolor: 'rgba(59, 130, 246, 0.1)'
+    }];
 
     const layout = {
         height: 300,
-        margin: { t: 20, b: 60, l: 60, r: 20 },
+        margin: { t: 20, b: 40, l: 60, r: 20 },
         xaxis: { title: 'Month' },
-        yaxis: { title: 'Spending (£)' },
-        legend: {
-            orientation: 'h',
-            y: -0.3,
-            x: 0.5,
-            xanchor: 'center'
-        },
-        hovermode: 'x unified'
+        yaxis: { title: 'Spending (£)' }
     };
 
-    Plotly.newPlot('lineChart', traces, layout, {responsive: true});
+    Plotly.newPlot('lineChart', data, layout, {responsive: true});
 }
 
+// Render category spending over time chart
 function renderCategorySpendingChart() {
+    const chartDiv = document.getElementById('categorySpendingChart');
+    if (!chartDiv) return;
+
     if (!allTransactions.length) {
-        document.getElementById('categorySpendingChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        chartDiv.innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
         return;
     }
 
-    // Group by month and category
     const monthlyData = {};
+    const spendingTxns = allTransactions.filter(t => t.amount < 0);
 
-    allTransactions.filter(t => t.amount < 0).forEach(t => {
+    spendingTxns.forEach(t => {
         const month = t.date.substring(0, 7);
         const cat = t.category || 'Uncategorized';
 
-        if (!monthlyData[month]) {
-            monthlyData[month] = {};
-        }
+        if (!monthlyData[month]) monthlyData[month] = {};
         monthlyData[month][cat] = (monthlyData[month][cat] || 0) + Math.abs(t.amount);
     });
 
     const months = Object.keys(monthlyData).sort();
-    const categories = [...new Set(allTransactions.filter(t => t.amount < 0).map(t => t.category))];
+    const categories = [...new Set(spendingTxns.map(t => t.category || 'Uncategorized'))];
+    const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
 
-    const traces = categories.map((cat, idx) => {
-        const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
-
-        return {
-            x: months,
-            y: months.map(m => monthlyData[m]?.[cat] || 0),
-            type: 'scatter',
-            mode: 'lines+markers',
-            name: cat,
-            line: { color: colors[idx % colors.length], width: 3 },
-            marker: { size: 7 }
-        };
-    });
+    const traces = categories.map((cat, idx) => ({
+        x: months,
+        y: months.map(m => monthlyData[m]?.[cat] || 0),
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: cat,
+        line: { color: colors[idx % colors.length], width: 3 },
+        marker: { size: 7 }
+    }));
 
     const layout = {
-        height: 350,
-        margin: { t: 30, b: 80, l: 60, r: 20 },
-        xaxis: {
-            title: 'Month',
-            tickangle: -45
-        },
-        yaxis: {
-            title: 'Spending (£)',
-            tickformat: '£,.0f'
-        },
-        legend: {
-            orientation: 'h',
-            y: -0.35,
-            x: 0.5,
-            xanchor: 'center'
-        },
-        hovermode: 'x unified',
-        showlegend: true
+        height: 400,
+        margin: { t: 30, b: 80, l: 70, r: 30 },
+        xaxis: { title: 'Month', tickangle: -45 },
+        yaxis: { title: 'Spending (£)', tickprefix: '£' },
+        legend: { orientation: 'h', y: -0.3, x: 0.5, xanchor: 'center' },
+        hovermode: 'x unified'
     };
 
     Plotly.newPlot('categorySpendingChart', traces, layout, {responsive: true});
 }
 
-
-function renderTransactionsTable() {
-    const tbody = document.getElementById('transactionsTable');
-
-    if (!allTransactions.length) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-500">No transactions yet. Upload a statement to get started!</td></tr>';
-        return;
-    }
-
-    const html = allTransactions.slice(0, 50).map(t => `
-        <tr class="border-b hover:bg-gray-50">
-            <td class="py-3 px-4">${formatDate(t.date)}</td>
-            <td class="py-3 px-4">${escapeHtml(t.description)}</td>
-            <td class="py-3 px-4">
-                <select
-                    class="category-select ${t.category === 'Uncategorized' ? 'bg-yellow-100' : 'bg-blue-100'}"
-                    style="border: none; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; cursor: pointer;"
-                    onchange="updateTransactionCategory('${t.id}', this.value, this)"
-                >
-                    ${allCategories.map(cat =>
-                        `<option value="${escapeHtml(cat)}" ${cat === t.category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
-                    ).join('')}
-                </select>
-            </td>
-            <td class="py-3 px-4 text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}">
-                £${Math.abs(t.amount).toFixed(2)}
-            </td>
-        </tr>
-    `).join('');
-
-    tbody.innerHTML = html;
-}
-
-let allTransactions = [];
-let allCategories = [];
-let filteredTransactions = [];
-let currentSort = { column: 'date', direction: 'desc' };
-let isLoading = false;
-
-// Add after loadCategories function
+// Populate category filter dropdown
 function populateCategoryFilter() {
     const filterSelect = document.getElementById('categoryFilter');
     if (!filterSelect) return;
 
-    // Keep "All Categories" option and add others
     const options = '<option value="all">All Categories</option>' +
         allCategories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
 
     filterSelect.innerHTML = options;
 }
 
+// Filter and render table
 function filterAndRenderTable() {
     const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
     const categoryFilter = document.getElementById('categoryFilter')?.value || 'all';
 
-    // Filter transactions
     filteredTransactions = allTransactions.filter(t => {
         const matchesSearch = !searchTerm || t.description.toLowerCase().includes(searchTerm);
         const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
         return matchesSearch && matchesCategory;
     });
 
-    // Update count
     const countElement = document.getElementById('transactionCount');
     if (countElement) {
         countElement.textContent = `${filteredTransactions.length} of ${allTransactions.length} transactions`;
     }
 
-    // Render with current sort
     renderTransactionsTable();
 }
 
+// Sort table
 function sortTable(column) {
-    // Toggle direction if same column, otherwise default to desc
     if (currentSort.column === column) {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
     } else {
@@ -450,7 +375,6 @@ function sortTable(column) {
         currentSort.direction = column === 'date' ? 'desc' : 'asc';
     }
 
-    // Update sort indicators
     document.getElementById('sortDate').textContent = '↕️';
     document.getElementById('sortCategory').textContent = '↕️';
     document.getElementById('sortAmount').textContent = '↕️';
@@ -458,7 +382,6 @@ function sortTable(column) {
     const indicator = currentSort.direction === 'asc' ? '↑' : '↓';
     document.getElementById(`sort${column.charAt(0).toUpperCase() + column.slice(1)}`).textContent = indicator;
 
-    // Sort filtered transactions
     filteredTransactions.sort((a, b) => {
         let aVal, bVal;
 
@@ -487,6 +410,7 @@ function sortTable(column) {
     renderTransactionsTable();
 }
 
+// Render transactions table
 function renderTransactionsTable() {
     const tbody = document.getElementById('transactionsTable');
 
@@ -519,6 +443,7 @@ function renderTransactionsTable() {
     tbody.innerHTML = html;
 }
 
+// Update transaction category
 async function updateTransactionCategory(transactionId, newCategory, selectElement) {
     const transaction = allTransactions.find(t => t.id === transactionId);
     const oldCategory = transaction?.category;
@@ -526,7 +451,6 @@ async function updateTransactionCategory(transactionId, newCategory, selectEleme
     if (oldCategory === newCategory) return;
 
     try {
-        // Show loading state
         selectElement.style.opacity = '0.5';
         selectElement.disabled = true;
 
@@ -545,32 +469,24 @@ async function updateTransactionCategory(transactionId, newCategory, selectEleme
             throw new Error(errorData.detail || 'Failed to update category');
         }
 
-        // Update local data
-        if (transaction) {
-            transaction.category = newCategory;
-        }
+        if (transaction) transaction.category = newCategory;
 
-        // Update UI
         selectElement.style.opacity = '1';
         selectElement.disabled = false;
 
-        // Update styling
         const isUncategorized = newCategory === 'Uncategorized';
         selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
 
-        // Flash success
         selectElement.style.background = '#d1fae5';
         setTimeout(() => {
             selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
         }, 500);
 
-        // Refresh charts and stats
         calculateMetrics();
         renderPieChart();
         renderLineChart();
         renderCategorySpendingChart();
 
-        // Update uncategorized count
         const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
         if (uncategorizedCount > 0) {
             document.getElementById('uncategorizedAlert').classList.remove('hidden');
@@ -584,86 +500,12 @@ async function updateTransactionCategory(transactionId, newCategory, selectEleme
         console.error('Error updating category:', error);
         selectElement.style.opacity = '1';
         selectElement.disabled = false;
-
-        // Revert selection
         selectElement.value = oldCategory;
         alert('Failed to update category: ' + error.message);
     }
 }
 
-async function updateTransactionCategory(transactionId, newCategory, selectElement) {
-    const transaction = allTransactions.find(t => t.id === transactionId);
-    const oldCategory = transaction?.category;
-
-    if (oldCategory === newCategory) return;
-
-    try {
-        // Show loading state
-        selectElement.style.opacity = '0.5';
-        selectElement.disabled = true;
-
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${window.location.origin}/api/transactions/${transactionId}/category`, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ category: newCategory })
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || 'Failed to update category');
-        }
-
-        // Update local data
-        if (transaction) {
-            transaction.category = newCategory;
-        }
-
-        // Update UI
-        selectElement.style.opacity = '1';
-        selectElement.disabled = false;
-
-        // Update styling
-        const isUncategorized = newCategory === 'Uncategorized';
-        selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
-
-        // Flash success
-        selectElement.style.background = '#d1fae5';
-        setTimeout(() => {
-            selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
-        }, 500);
-
-        // Refresh charts and stats
-        calculateMetrics();
-        renderPieChart();
-        renderLineChart();
-        renderCategorySpendingChart();
-
-        // Update uncategorized count
-        const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
-        if (uncategorizedCount > 0) {
-            document.getElementById('uncategorizedAlert').classList.remove('hidden');
-            document.getElementById('uncategorizedCount').textContent =
-                `${uncategorizedCount} transactions need categorization`;
-        } else {
-            document.getElementById('uncategorizedAlert').classList.add('hidden');
-        }
-
-    } catch (error) {
-        console.error('Error updating category:', error);
-        selectElement.style.opacity = '1';
-        selectElement.disabled = false;
-
-        // Revert selection
-        selectElement.value = oldCategory;
-        alert('Failed to update category: ' + error.message);
-    }
-}
-
-
+// Helper functions
 function formatDate(dateStr) {
     if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
