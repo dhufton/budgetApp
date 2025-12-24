@@ -14,9 +14,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Show loading state
     showLoading(true);
+    await loadCategories();
     await loadDashboard();
     showLoading(false);
 });
+
 
 window.uploadFiles = async function() {
     const input = document.getElementById('fileInput');
@@ -120,7 +122,6 @@ async function loadDashboard() {
         allTransactions = data.transactions;
         console.log(`Loaded ${allTransactions.length} transactions`);
 
-        // Count uncategorized
         const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
 
         document.getElementById('totalTransactions').textContent = allTransactions.length.toLocaleString();
@@ -139,6 +140,7 @@ async function loadDashboard() {
             calculateMetrics();
             renderPieChart();
             renderLineChart();
+            renderCategorySpendingChart();
             renderTransactionsTable();
         }
     } catch (error) {
@@ -170,6 +172,20 @@ function showEmptyState() {
     document.getElementById('pieChart').innerHTML = '<p class="text-gray-500 text-center py-8">Upload a statement to see spending breakdown</p>';
     document.getElementById('lineChart').innerHTML = '<p class="text-gray-500 text-center py-8">Upload a statement to see monthly trends</p>';
 }
+
+let allCategories = [];
+
+async function loadCategories() {
+    try {
+        const data = await api.getCategories();
+        allCategories = data.categories || ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        console.log('Loaded categories:', allCategories);
+    } catch (error) {
+        console.error('Failed to load categories:', error);
+        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+    }
+}
+
 
 function showErrorState(message) {
     const tbody = document.getElementById('transactionsTable');
@@ -242,36 +258,117 @@ function renderLineChart() {
         return;
     }
 
+    // Group by month and category
+    const monthlyData = {};
+
+    allTransactions.filter(t => t.amount < 0).forEach(t => {
+        const month = t.date.substring(0, 7); // YYYY-MM
+        const cat = t.category || 'Uncategorized';
+
+        if (!monthlyData[month]) {
+            monthlyData[month] = {};
+        }
+        if (!monthlyData[month][cat]) {
+            monthlyData[month][cat] = 0;
+        }
+        monthlyData[month][cat] += Math.abs(t.amount);
+    });
+
+    const months = Object.keys(monthlyData).sort();
+    const categories = [...new Set(allTransactions.map(t => t.category))];
+
+    // Create a line for each category
+    const traces = categories.map((cat, idx) => {
+        const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+        return {
+            x: months,
+            y: months.map(m => monthlyData[m][cat] || 0),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: cat,
+            line: { color: colors[idx % colors.length], width: 2 },
+            marker: { size: 6 }
+        };
+    });
+
+    const layout = {
+        height: 300,
+        margin: { t: 20, b: 60, l: 60, r: 20 },
+        xaxis: { title: 'Month' },
+        yaxis: { title: 'Spending (£)' },
+        legend: {
+            orientation: 'h',
+            y: -0.3,
+            x: 0.5,
+            xanchor: 'center'
+        },
+        hovermode: 'x unified'
+    };
+
+    Plotly.newPlot('lineChart', traces, layout, {responsive: true});
+}
+
+function renderCategorySpendingChart() {
+    if (!allTransactions.length) {
+        document.getElementById('categorySpendingChart').innerHTML = '<p class="text-gray-500 text-center py-8">No data yet</p>';
+        return;
+    }
+
+    // Group by month and category
     const monthlyData = {};
 
     allTransactions.filter(t => t.amount < 0).forEach(t => {
         const month = t.date.substring(0, 7);
-        monthlyData[month] = (monthlyData[month] || 0) + Math.abs(t.amount);
+        const cat = t.category || 'Uncategorized';
+
+        if (!monthlyData[month]) {
+            monthlyData[month] = {};
+        }
+        monthlyData[month][cat] = (monthlyData[month][cat] || 0) + Math.abs(t.amount);
     });
 
     const months = Object.keys(monthlyData).sort();
-    const values = months.map(m => monthlyData[m]);
+    const categories = [...new Set(allTransactions.filter(t => t.amount < 0).map(t => t.category))];
 
-    const data = [{
-        x: months,
-        y: values,
-        type: 'scatter',
-        mode: 'lines+markers',
-        line: { color: '#3b82f6', width: 3 },
-        marker: { size: 8 },
-        fill: 'tozeroy',
-        fillcolor: 'rgba(59, 130, 246, 0.1)'
-    }];
+    const traces = categories.map((cat, idx) => {
+        const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+
+        return {
+            x: months,
+            y: months.map(m => monthlyData[m]?.[cat] || 0),
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: cat,
+            line: { color: colors[idx % colors.length], width: 3 },
+            marker: { size: 7 }
+        };
+    });
 
     const layout = {
-        height: 300,
-        margin: { t: 20, b: 40, l: 60, r: 20 },
-        xaxis: { title: 'Month' },
-        yaxis: { title: 'Spending (£)' }
+        height: 350,
+        margin: { t: 30, b: 80, l: 60, r: 20 },
+        xaxis: {
+            title: 'Month',
+            tickangle: -45
+        },
+        yaxis: {
+            title: 'Spending (£)',
+            tickformat: '£,.0f'
+        },
+        legend: {
+            orientation: 'h',
+            y: -0.35,
+            x: 0.5,
+            xanchor: 'center'
+        },
+        hovermode: 'x unified',
+        showlegend: true
     };
 
-    Plotly.newPlot('lineChart', data, layout, {responsive: true});
+    Plotly.newPlot('categorySpendingChart', traces, layout, {responsive: true});
 }
+
 
 function renderTransactionsTable() {
     const tbody = document.getElementById('transactionsTable');
@@ -286,11 +383,15 @@ function renderTransactionsTable() {
             <td class="py-3 px-4">${formatDate(t.date)}</td>
             <td class="py-3 px-4">${escapeHtml(t.description)}</td>
             <td class="py-3 px-4">
-                <span class="px-2 py-1 rounded-full text-xs font-semibold ${
-                    t.category === 'Uncategorized' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
-                }">
-                    ${t.category}
-                </span>
+                <select
+                    class="category-select ${t.category === 'Uncategorized' ? 'bg-yellow-100' : 'bg-blue-100'}"
+                    style="border: none; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; cursor: pointer;"
+                    onchange="updateTransactionCategory('${t.id}', this.value, this)"
+                >
+                    ${allCategories.map(cat =>
+                        `<option value="${escapeHtml(cat)}" ${cat === t.category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
+                    ).join('')}
+                </select>
             </td>
             <td class="py-3 px-4 text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}">
                 £${Math.abs(t.amount).toFixed(2)}
@@ -300,6 +401,79 @@ function renderTransactionsTable() {
 
     tbody.innerHTML = html;
 }
+
+async function updateTransactionCategory(transactionId, newCategory, selectElement) {
+    const transaction = allTransactions.find(t => t.id === transactionId);
+    const oldCategory = transaction?.category;
+
+    if (oldCategory === newCategory) return;
+
+    try {
+        // Show loading state
+        selectElement.style.opacity = '0.5';
+        selectElement.disabled = true;
+
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${window.location.origin}/api/transactions/${transactionId}/category`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ category: newCategory })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to update category');
+        }
+
+        // Update local data
+        if (transaction) {
+            transaction.category = newCategory;
+        }
+
+        // Update UI
+        selectElement.style.opacity = '1';
+        selectElement.disabled = false;
+
+        // Update styling
+        const isUncategorized = newCategory === 'Uncategorized';
+        selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
+
+        // Flash success
+        selectElement.style.background = '#d1fae5';
+        setTimeout(() => {
+            selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
+        }, 500);
+
+        // Refresh charts and stats
+        calculateMetrics();
+        renderPieChart();
+        renderLineChart();
+        renderCategorySpendingChart();
+
+        // Update uncategorized count
+        const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
+        if (uncategorizedCount > 0) {
+            document.getElementById('uncategorizedAlert').classList.remove('hidden');
+            document.getElementById('uncategorizedCount').textContent =
+                `${uncategorizedCount} transactions need categorization`;
+        } else {
+            document.getElementById('uncategorizedAlert').classList.add('hidden');
+        }
+
+    } catch (error) {
+        console.error('Error updating category:', error);
+        selectElement.style.opacity = '1';
+        selectElement.disabled = false;
+
+        // Revert selection
+        selectElement.value = oldCategory;
+        alert('Failed to update category: ' + error.message);
+    }
+}
+
 
 function formatDate(dateStr) {
     if (!dateStr) return 'N/A';
