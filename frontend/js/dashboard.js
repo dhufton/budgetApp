@@ -402,6 +402,195 @@ function renderTransactionsTable() {
     tbody.innerHTML = html;
 }
 
+let allTransactions = [];
+let allCategories = [];
+let filteredTransactions = [];
+let currentSort = { column: 'date', direction: 'desc' };
+let isLoading = false;
+
+// Add after loadCategories function
+function populateCategoryFilter() {
+    const filterSelect = document.getElementById('categoryFilter');
+    if (!filterSelect) return;
+
+    // Keep "All Categories" option and add others
+    const options = '<option value="all">All Categories</option>' +
+        allCategories.map(cat => `<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('');
+
+    filterSelect.innerHTML = options;
+}
+
+function filterAndRenderTable() {
+    const searchTerm = document.getElementById('searchInput')?.value.toLowerCase() || '';
+    const categoryFilter = document.getElementById('categoryFilter')?.value || 'all';
+
+    // Filter transactions
+    filteredTransactions = allTransactions.filter(t => {
+        const matchesSearch = !searchTerm || t.description.toLowerCase().includes(searchTerm);
+        const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
+        return matchesSearch && matchesCategory;
+    });
+
+    // Update count
+    const countElement = document.getElementById('transactionCount');
+    if (countElement) {
+        countElement.textContent = `${filteredTransactions.length} of ${allTransactions.length} transactions`;
+    }
+
+    // Render with current sort
+    renderTransactionsTable();
+}
+
+function sortTable(column) {
+    // Toggle direction if same column, otherwise default to desc
+    if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.column = column;
+        currentSort.direction = column === 'date' ? 'desc' : 'asc';
+    }
+
+    // Update sort indicators
+    document.getElementById('sortDate').textContent = '↕️';
+    document.getElementById('sortCategory').textContent = '↕️';
+    document.getElementById('sortAmount').textContent = '↕️';
+
+    const indicator = currentSort.direction === 'asc' ? '↑' : '↓';
+    document.getElementById(`sort${column.charAt(0).toUpperCase() + column.slice(1)}`).textContent = indicator;
+
+    // Sort filtered transactions
+    filteredTransactions.sort((a, b) => {
+        let aVal, bVal;
+
+        switch(column) {
+            case 'date':
+                aVal = new Date(a.date);
+                bVal = new Date(b.date);
+                break;
+            case 'amount':
+                aVal = Math.abs(a.amount);
+                bVal = Math.abs(b.amount);
+                break;
+            case 'category':
+                aVal = a.category.toLowerCase();
+                bVal = b.category.toLowerCase();
+                break;
+            default:
+                return 0;
+        }
+
+        if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    renderTransactionsTable();
+}
+
+function renderTransactionsTable() {
+    const tbody = document.getElementById('transactionsTable');
+
+    if (!filteredTransactions || filteredTransactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-500">No transactions match your filters.</td></tr>';
+        return;
+    }
+
+    const html = filteredTransactions.map(t => `
+        <tr class="border-b hover:bg-gray-50">
+            <td class="py-3 px-4">${formatDate(t.date)}</td>
+            <td class="py-3 px-4">${escapeHtml(t.description)}</td>
+            <td class="py-3 px-4">
+                <select
+                    class="category-select ${t.category === 'Uncategorized' ? 'bg-yellow-100' : 'bg-blue-100'}"
+                    style="border: none; padding: 0.25rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; cursor: pointer;"
+                    onchange="updateTransactionCategory('${t.id}', this.value, this)"
+                >
+                    ${allCategories.map(cat =>
+                        `<option value="${escapeHtml(cat)}" ${cat === t.category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
+                    ).join('')}
+                </select>
+            </td>
+            <td class="py-3 px-4 text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}">
+                £${Math.abs(t.amount).toFixed(2)}
+            </td>
+        </tr>
+    `).join('');
+
+    tbody.innerHTML = html;
+}
+
+async function updateTransactionCategory(transactionId, newCategory, selectElement) {
+    const transaction = allTransactions.find(t => t.id === transactionId);
+    const oldCategory = transaction?.category;
+
+    if (oldCategory === newCategory) return;
+
+    try {
+        // Show loading state
+        selectElement.style.opacity = '0.5';
+        selectElement.disabled = true;
+
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`${window.location.origin}/api/transactions/${transactionId}/category`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ category: newCategory })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to update category');
+        }
+
+        // Update local data
+        if (transaction) {
+            transaction.category = newCategory;
+        }
+
+        // Update UI
+        selectElement.style.opacity = '1';
+        selectElement.disabled = false;
+
+        // Update styling
+        const isUncategorized = newCategory === 'Uncategorized';
+        selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
+
+        // Flash success
+        selectElement.style.background = '#d1fae5';
+        setTimeout(() => {
+            selectElement.className = `category-select ${isUncategorized ? 'bg-yellow-100' : 'bg-blue-100'}`;
+        }, 500);
+
+        // Refresh charts and stats
+        calculateMetrics();
+        renderPieChart();
+        renderLineChart();
+        renderCategorySpendingChart();
+
+        // Update uncategorized count
+        const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
+        if (uncategorizedCount > 0) {
+            document.getElementById('uncategorizedAlert').classList.remove('hidden');
+            document.getElementById('uncategorizedCount').textContent =
+                `${uncategorizedCount} transactions need categorization`;
+        } else {
+            document.getElementById('uncategorizedAlert').classList.add('hidden');
+        }
+
+    } catch (error) {
+        console.error('Error updating category:', error);
+        selectElement.style.opacity = '1';
+        selectElement.disabled = false;
+
+        // Revert selection
+        selectElement.value = oldCategory;
+        alert('Failed to update category: ' + error.message);
+    }
+}
+
 async function updateTransactionCategory(transactionId, newCategory, selectElement) {
     const transaction = allTransactions.find(t => t.id === transactionId);
     const oldCategory = transaction?.category;
