@@ -22,6 +22,7 @@ async function loadCategories() {
     try {
         const data = await api.getCategories();
         allCategories = data.categories || [];
+        console.log('Loaded categories:', allCategories);
     } catch (error) {
         console.error('Failed to load categories:', error);
         // Fallback to default categories
@@ -32,7 +33,17 @@ async function loadCategories() {
 async function loadTransactions() {
     try {
         const data = await api.getTransactions();
-        allTransactions = data.transactions || [];
+        console.log('Raw API response:', data);
+
+        // Make sure we're accessing the transactions array correctly
+        if (data && data.transactions) {
+            allTransactions = data.transactions;
+        } else {
+            allTransactions = [];
+        }
+
+        console.log('Loaded transactions count:', allTransactions.length);
+        console.log('First transaction:', allTransactions[0]);
 
         // Sort by date (newest first)
         allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -49,7 +60,7 @@ async function loadTransactions() {
 function renderTransactions() {
     const tbody = document.getElementById('transactionsBody');
 
-    console.log('Rendering transactions:', allTransactions); // Debug log
+    console.log('Rendering. allTransactions length:', allTransactions.length);
 
     if (!allTransactions || allTransactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color: #6b7280; padding: 2rem;">No transactions found. Upload a statement to get started!</td></tr>';
@@ -59,10 +70,12 @@ function renderTransactions() {
     // Filter transactions based on current filter
     let filteredTransactions = allTransactions;
     if (currentFilter === 'uncategorized') {
-        filteredTransactions = allTransactions.filter(t => (t.category || 'Uncategorized') === 'Uncategorized');
+        filteredTransactions = allTransactions.filter(t => t.category === 'Uncategorized');
     } else if (currentFilter === 'categorized') {
-        filteredTransactions = allTransactions.filter(t => (t.category || 'Uncategorized') !== 'Uncategorized');
+        filteredTransactions = allTransactions.filter(t => t.category !== 'Uncategorized');
     }
+
+    console.log('Filtered transactions count:', filteredTransactions.length);
 
     if (filteredTransactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color: #6b7280; padding: 2rem;">No transactions match this filter.</td></tr>';
@@ -70,29 +83,22 @@ function renderTransactions() {
     }
 
     const html = filteredTransactions.map(t => {
-        console.log('Processing transaction:', t); // Debug log for each transaction
-
-        const id = t.id || '';
-        const date = t.date || t.transaction_date || '';
-        const description = t.description || t.merchant || t.details || 'No description';
-        const category = t.category || 'Uncategorized';
-        const amount = parseFloat(t.amount) || 0;
-
-        const isUncategorized = category === 'Uncategorized';
+        const isUncategorized = t.category === 'Uncategorized';
+        const amount = parseFloat(t.amount);
         const amountClass = amount >= 0 ? 'amount-positive' : 'amount-negative';
 
         return `
-            <tr class="${isUncategorized ? 'uncategorized-row' : ''}" data-id="${id}">
-                <td>${formatDate(date)}</td>
-                <td>${escapeHtml(description)}</td>
+            <tr class="${isUncategorized ? 'uncategorized-row' : ''}" data-id="${t.id}">
+                <td>${formatDate(t.date)}</td>
+                <td>${escapeHtml(t.description)}</td>
                 <td>
                     <select
                         class="category-select ${isUncategorized ? 'uncategorized' : ''}"
-                        data-transaction-id="${id}"
-                        onchange="updateCategory('${id}', this.value, this)"
+                        data-transaction-id="${t.id}"
+                        onchange="updateCategory('${t.id}', this.value, this)"
                     >
                         ${allCategories.map(cat =>
-                            `<option value="${escapeHtml(cat)}" ${cat === category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
+                            `<option value="${escapeHtml(cat)}" ${cat === t.category ? 'selected' : ''}>${escapeHtml(cat)}</option>`
                         ).join('')}
                     </select>
                 </td>
@@ -106,7 +112,6 @@ function renderTransactions() {
     // Update pagination info
     updatePaginationInfo(filteredTransactions.length, allTransactions.length);
 }
-
 
 async function updateCategory(transactionId, newCategory, selectElement) {
     const row = selectElement.closest('tr');
@@ -202,6 +207,7 @@ function updatePaginationInfo(showing, total) {
 }
 
 function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -211,6 +217,7 @@ function formatDate(dateStr) {
 }
 
 function escapeHtml(text) {
+    if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
