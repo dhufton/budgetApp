@@ -111,22 +111,24 @@ async function loadDashboard() {
         console.log('Loading dashboard data...');
         const data = await api.getTransactions();
 
-        if (!data) {
+        if (!data || !data.transactions) {
             console.error('No data returned from /transactions');
             showEmptyState();
             return;
         }
 
-        console.log(`Loaded ${data.total} transactions`);
+        allTransactions = data.transactions;
+        console.log(`Loaded ${allTransactions.length} transactions`);
 
-        allTransactions = data.transactions || [];
+        // Count uncategorized
+        const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
 
-        document.getElementById('totalTransactions').textContent = (data.total || 0).toLocaleString();
+        document.getElementById('totalTransactions').textContent = allTransactions.length.toLocaleString();
 
-        if (data.uncategorized_count > 0) {
+        if (uncategorizedCount > 0) {
             document.getElementById('uncategorizedAlert').classList.remove('hidden');
             document.getElementById('uncategorizedCount').textContent =
-                `${data.uncategorized_count} transactions need categorization`;
+                `${uncategorizedCount} transactions need categorization`;
         } else {
             document.getElementById('uncategorizedAlert').classList.add('hidden');
         }
@@ -191,12 +193,12 @@ function showErrorState(message) {
 
 function calculateMetrics() {
     const spent = allTransactions
-        .filter(t => t.Amount < 0 && t.Category !== 'Savings')
-        .reduce((sum, t) => sum + Math.abs(t.Amount), 0);
+        .filter(t => t.amount < 0 && t.category !== 'Savings')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
     const saved = allTransactions
-        .filter(t => t.Category === 'Savings')
-        .reduce((sum, t) => sum + Math.abs(t.Amount), 0);
+        .filter(t => t.category === 'Savings')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
     document.getElementById('totalSpent').textContent = `£${spent.toFixed(0)}`;
     document.getElementById('netSaved').textContent = `£${saved.toFixed(0)}`;
@@ -210,9 +212,9 @@ function renderPieChart() {
 
     const categoryTotals = {};
 
-    allTransactions.filter(t => t.Amount < 0).forEach(t => {
-        const cat = t.Category || 'Uncategorized';
-        categoryTotals[cat] = (categoryTotals[cat] || 0) + Math.abs(t.Amount);
+    allTransactions.filter(t => t.amount < 0).forEach(t => {
+        const cat = t.category || 'Uncategorized';
+        categoryTotals[cat] = (categoryTotals[cat] || 0) + Math.abs(t.amount);
     });
 
     const data = [{
@@ -242,9 +244,9 @@ function renderLineChart() {
 
     const monthlyData = {};
 
-    allTransactions.filter(t => t.Amount < 0).forEach(t => {
-        const month = t.Date.substring(0, 7);
-        monthlyData[month] = (monthlyData[month] || 0) + Math.abs(t.Amount);
+    allTransactions.filter(t => t.amount < 0).forEach(t => {
+        const month = t.date.substring(0, 7);
+        monthlyData[month] = (monthlyData[month] || 0) + Math.abs(t.amount);
     });
 
     const months = Object.keys(monthlyData).sort();
@@ -281,20 +283,37 @@ function renderTransactionsTable() {
 
     const html = allTransactions.slice(0, 50).map(t => `
         <tr class="border-b hover:bg-gray-50">
-            <td class="py-3 px-4">${t.Date}</td>
-            <td class="py-3 px-4">${t.Description}</td>
+            <td class="py-3 px-4">${formatDate(t.date)}</td>
+            <td class="py-3 px-4">${escapeHtml(t.description)}</td>
             <td class="py-3 px-4">
                 <span class="px-2 py-1 rounded-full text-xs font-semibold ${
-                    t.Category === 'Uncategorized' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
+                    t.category === 'Uncategorized' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'
                 }">
-                    ${t.Category}
+                    ${t.category}
                 </span>
             </td>
-            <td class="py-3 px-4 text-right ${t.Amount < 0 ? 'text-red-600' : 'text-green-600'}">
-                £${Math.abs(t.Amount).toFixed(2)}
+            <td class="py-3 px-4 text-right ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}">
+                £${Math.abs(t.amount).toFixed(2)}
             </td>
         </tr>
     `).join('');
 
     tbody.innerHTML = html;
+}
+
+function formatDate(dateStr) {
+    if (!dateStr) return 'N/A';
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+    });
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
