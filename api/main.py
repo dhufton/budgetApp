@@ -14,7 +14,7 @@ from api.dependencies import get_supabase, get_groq_service
 from fastapi import FastAPI, Depends
 from api.auth import get_current_user
 from supabase import Client
-from groq_service import GroqService
+from api.groq_service import GroqService
 from datetime import datetime, timedelta
 from collections import defaultdict
 
