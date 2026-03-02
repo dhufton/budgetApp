@@ -1,35 +1,52 @@
 // frontend/js/api.js
-const API_BASE = window.location.origin;
 
-// Create api object that dashboard.js expects
+// ---------------------------------------------------------------------------
+// Core auth fetch helper — handles token injection, 401 redirect, and errors.
+// FormData bodies are detected automatically so Content-Type is not forced
+// (the browser must set it with the multipart boundary for file uploads).
+// ---------------------------------------------------------------------------
+async function authFetch(url, options = {}) {
+    const token = localStorage.getItem('access_token');
+
+    if (!token) {
+        console.error('No token found, redirecting to login');
+        window.location.href = '/';
+        return null;
+    }
+
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+    };
+
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(url, { ...options, headers });
+
+    if (response.status === 401) {
+        console.error('Unauthorized - clearing token');
+        localStorage.removeItem('access_token');
+        window.location.href = '/';
+        return null;
+    }
+
+    return response;
+}
+
+// ---------------------------------------------------------------------------
+// API object
+// ---------------------------------------------------------------------------
 const api = {
+
     async getTransactions() {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            console.error('No token found, redirecting to login');
-            window.location.href = '/';
-            return null;
-        }
-
         try {
             console.log('Fetching transactions...');
-            const response = await fetch(`${API_BASE}/api/transactions`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await authFetch(ENDPOINTS.transactions);
+            if (!response) return null;
 
             console.log(`Transactions response: ${response.status}`);
-
-            if (response.status === 401) {
-                console.error('Unauthorized - clearing token');
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -44,31 +61,14 @@ const api = {
     },
 
     async uploadFile(formData) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            console.error('No token found');
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/upload`, {
+            const response = await authFetch(ENDPOINTS.upload, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                },
-                body: formData
+                body: formData,
             });
+            if (!response) return null;
 
             console.log(`Upload response: ${response.status}`);
-
-            if (response.status === 401) {
-                console.error('Unauthorized - clearing token');
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
 
             if (response.status === 409) {
                 const data = await response.json();
@@ -88,27 +88,9 @@ const api = {
     },
 
     async getCategories() {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/categories`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            const response = await authFetch(ENDPOINTS.categories);
+            if (!response) return null;
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -122,28 +104,12 @@ const api = {
     },
 
     async addCategory(category) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/categories`, {
+            const response = await authFetch(ENDPOINTS.categories, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ category })
+                body: JSON.stringify({ category }),
             });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            if (!response) return null;
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -158,27 +124,11 @@ const api = {
     },
 
     async deleteCategory(category) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/categories/${encodeURIComponent(category)}`, {
+            const response = await authFetch(ENDPOINTS.category(category), {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
             });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            if (!response) return null;
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -193,27 +143,9 @@ const api = {
     },
 
     async getBudgetTargets() {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/budget-targets`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            const response = await authFetch(ENDPOINTS.budgetTargets);
+            if (!response) return null;
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -227,28 +159,12 @@ const api = {
     },
 
     async setBudgetTarget(category, targetAmount) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/budget-targets`, {
+            const response = await authFetch(ENDPOINTS.budgetTargets, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ category, target_amount: targetAmount })
+                body: JSON.stringify({ category, target_amount: targetAmount }),
             });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            if (!response) return null;
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -263,27 +179,11 @@ const api = {
     },
 
     async deleteBudgetTarget(category) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/budget-targets/${encodeURIComponent(category)}`, {
+            const response = await authFetch(ENDPOINTS.budgetTarget(category), {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
             });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            if (!response) return null;
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -298,27 +198,9 @@ const api = {
     },
 
     async getBudgetComparison() {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/budget-comparison`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            const response = await authFetch(ENDPOINTS.budgetComparison);
+            if (!response) return null;
 
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
@@ -332,28 +214,12 @@ const api = {
     },
 
     async updateTransactionCategory(transactionId, category) {
-        const token = localStorage.getItem('access_token');
-
-        if (!token) {
-            window.location.href = '/';
-            return null;
-        }
-
         try {
-            const response = await fetch(`${API_BASE}/api/transactions/${transactionId}/category`, {
+            const response = await authFetch(ENDPOINTS.transactionCategory(transactionId), {
                 method: 'PATCH',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ category })
+                body: JSON.stringify({ category }),
             });
-
-            if (response.status === 401) {
-                localStorage.removeItem('access_token');
-                window.location.href = '/';
-                return null;
-            }
+            if (!response) return null;
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -365,5 +231,5 @@ const api = {
             console.error('Failed to update transaction category:', error);
             throw error;
         }
-    }
+    },
 };

@@ -57,7 +57,7 @@ function renderCategories() {
         return;
     }
 
-    const defaultCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+    const defaultCategories = DEFAULT_CATEGORIES;
 
     const html = currentCategories.map(cat => {
         const isDefault = defaultCategories.includes(cat);

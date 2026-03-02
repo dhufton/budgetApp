@@ -124,7 +124,7 @@
 
     async function initSupabase() {
         try {
-            const response = await fetch('/api/config');
+            const response = await fetch(ENDPOINTS.config);
             const config = await response.json();
 
             if (!config.supabase_url || !config.supabase_key) {

@@ -26,7 +26,7 @@ async function loadCategories() {
     } catch (error) {
         console.error('Failed to load categories:', error);
         // Fallback to default categories
-        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        allCategories = DEFAULT_CATEGORIES;
     }
 }
 

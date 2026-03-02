@@ -93,11 +93,11 @@ window.uploadFiles = async function() {
 async function loadCategories() {
     try {
         const data = await api.getCategories();
-        allCategories = data.categories || ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        allCategories = data.categories || DEFAULT_CATEGORIES;
         console.log('Loaded categories:', allCategories);
     } catch (error) {
         console.error('Failed to load categories:', error);
-        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        allCategories = DEFAULT_CATEGORIES;
     }
 }
 
@@ -236,9 +236,7 @@ function renderPieChart() {
         values: Object.values(categoryTotals),
         labels: Object.keys(categoryTotals),
         type: 'pie',
-        marker: {
-            colors: ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
-        }
+        marker: { colors: CHART_COLOURS }
     }];
 
     const layout = {
@@ -312,7 +310,7 @@ function renderCategorySpendingChart() {
 
     const months = Object.keys(monthlyData).sort();
     const categories = [...new Set(spendingTxns.map(t => t.category || 'Uncategorized'))];
-    const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316'];
+    const colors = CHART_COLOURS;
 
     const traces = categories.map((cat, idx) => ({
         x: months,
