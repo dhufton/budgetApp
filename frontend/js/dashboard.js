@@ -1,20 +1,25 @@
 // frontend/js/dashboard.js
+
+// ---------------------------------------------------------------------------
 // Global state
+// ---------------------------------------------------------------------------
 let allTransactions = [];
 let allCategories = [];
 let filteredTransactions = [];
 let currentSort = { column: 'date', direction: 'desc' };
 let isLoading = false;
 
-// Initialize on page load
+// ---------------------------------------------------------------------------
+// Initialise on page load
+// ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
     if (!token) {
         console.error('No valid auth, redirecting');
         return;
     }
-    const email = localStorage.getItem('user_email');
-    document.getElementById('userEmail').textContent = email || 'User';
+    document.getElementById('userEmail').textContent =
+        localStorage.getItem('user_email') || 'User';
     showLoading(true);
     await loadCategories();
     await loadDashboard();
@@ -22,9 +27,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ---------------------------------------------------------------------------
-// File upload handler
+// File upload
 // ---------------------------------------------------------------------------
-window.uploadFiles = async function() {
+async function uploadFiles() {
     const input = document.getElementById('fileInput');
     const files = input.files;
     if (files.length === 0) { alert('Please select files to upload'); return; }
@@ -61,9 +66,9 @@ window.uploadFiles = async function() {
 
     input.value = '';
     let finalMessage = '';
-    if (successCount > 0)  finalMessage += `✅ ${successCount} file(s) uploaded`;
+    if (successCount > 0)   finalMessage += `✅ ${successCount} file(s) uploaded`;
     if (duplicateCount > 0) finalMessage += (finalMessage ? ', ' : '') + `⚠️ ${duplicateCount} duplicate(s) skipped`;
-    if (errorCount > 0)    finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
+    if (errorCount > 0)     finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
 
     status.textContent = finalMessage + '. Refreshing...';
     status.className = successCount > 0 ? 'mt-2 text-sm text-green-600' : 'mt-2 text-sm text-yellow-600';
@@ -76,7 +81,7 @@ window.uploadFiles = async function() {
             status.textContent = finalMessage;
         }, 1000);
     }
-};
+}
 
 // ---------------------------------------------------------------------------
 // Load categories
@@ -112,6 +117,12 @@ async function loadDashboard() {
             document.getElementById('uncategorizedAlert').classList.remove('hidden');
             document.getElementById('uncategorizedCount').textContent =
                 `${uncategorizedCount} transaction${uncategorizedCount > 1 ? 's' : ''} need categorisation`;
+            const btn = document.getElementById('fixCategoriesBtn');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '✨ Fix with AI';
+                btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed');
+            }
         } else {
             document.getElementById('uncategorizedAlert').classList.add('hidden');
         }
@@ -125,7 +136,6 @@ async function loadDashboard() {
             renderLineChart();
             renderCategorySpendingChart();
             sortTable('date');
-            // Load insights in background — don't await so it doesn't block the page
             loadInsights();
         }
     } catch (error) {
@@ -149,7 +159,6 @@ async function loadInsights() {
             card.classList.remove('hidden');
         }
     } catch (error) {
-        // Insights are non-critical — fail silently
         console.warn('Could not load insights:', error);
     }
 }
@@ -157,7 +166,7 @@ async function loadInsights() {
 // ---------------------------------------------------------------------------
 // AI: Fix uncategorised transactions
 // ---------------------------------------------------------------------------
-window.fixUncategorised = async function() {
+async function fixUncategorised() {
     const btn = document.getElementById('fixCategoriesBtn');
     const countEl = document.getElementById('uncategorizedCount');
 
@@ -170,7 +179,6 @@ window.fixUncategorised = async function() {
         if (result && result.changed > 0) {
             countEl.textContent = `✅ ${result.changed} transaction${result.changed > 1 ? 's' : ''} categorised!`;
             btn.classList.add('hidden');
-            // Reload dashboard after short delay so the user sees the success message
             setTimeout(async () => {
                 showLoading(true);
                 await loadDashboard();
@@ -189,53 +197,73 @@ window.fixUncategorised = async function() {
         btn.textContent = '✨ Fix with AI';
         btn.classList.remove('opacity-75', 'cursor-not-allowed');
     }
-};
+}
 
 // ---------------------------------------------------------------------------
-// Show/hide loading state (unchanged)
+// Metrics
+// ---------------------------------------------------------------------------
+function calculateMetrics() {
+    const spending = allTransactions
+        .filter(t => t.amount < 0)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    const income = allTransactions
+        .filter(t => t.amount > 0)
+        .reduce((sum, t) => sum + t.amount, 0);
+
+    const net = income - spending;
+
+    const totalSpentEl = document.getElementById('totalSpent');
+    const netSavedEl = document.getElementById('netSaved');
+
+    if (totalSpentEl) totalSpentEl.textContent = `£${spending.toFixed(2)}`;
+    if (netSavedEl) {
+        netSavedEl.textContent = `£${Math.abs(net).toFixed(2)}`;
+        netSavedEl.className = `value ${net >= 0 ? 'text-green' : 'text-red'}`;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Loading / empty / error states
 // ---------------------------------------------------------------------------
 function showLoading(loading) {
     isLoading = loading;
     const transactionsTable = document.getElementById('transactionsTable');
     if (loading) {
-        if (transactionsTable) transactionsTable.innerHTML = `
-            <tr><td colspan="5" class="text-center py-8 text-gray-400">Loading transactions...</td></tr>`;
-        document.getElementById('pieChart').innerHTML =
-            '<p class="text-center text-gray-400 py-8">Loading chart...</p>';
-        document.getElementById('lineChart').innerHTML =
-            '<p class="text-center text-gray-400 py-8">Loading chart...</p>';
+        if (transactionsTable) transactionsTable.innerHTML =
+            `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">Loading transactions...</td></tr>`;
+        const pieChart = document.getElementById('pieChart');
+        const lineChart = document.getElementById('lineChart');
+        if (pieChart) pieChart.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>';
+        if (lineChart) lineChart.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>';
     }
 }
 
-// ---------------------------------------------------------------------------
-// Show empty / error states (unchanged)
-// ---------------------------------------------------------------------------
 function showEmptyState() {
     const tbody = document.getElementById('transactionsTable');
-    tbody.innerHTML = `
-        <tr><td colspan="5" class="text-center py-8 text-gray-400">
-            No transactions yet — upload a bank statement to get started!
-        </td></tr>`;
-    document.getElementById('pieChart').innerHTML =
-        '<p class="text-center text-gray-400 py-8">Upload a statement to see spending breakdown</p>';
-    document.getElementById('lineChart').innerHTML =
-        '<p class="text-center text-gray-400 py-8">Upload a statement to see monthly trends</p>';
+    if (tbody) tbody.innerHTML =
+        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">No transactions yet — upload a bank statement to get started!</td></tr>`;
+    const pieChart = document.getElementById('pieChart');
+    const lineChart = document.getElementById('lineChart');
+    if (pieChart) pieChart.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see spending breakdown</p>';
+    if (lineChart) lineChart.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see monthly trends</p>';
 }
 
 function showErrorState(message) {
     const tbody = document.getElementById('transactionsTable');
-    tbody.innerHTML = `
-        <tr><td colspan="5" class="text-center py-8 text-red-400">
-            Failed to load  ${message}
-        </td></tr>`;
+    if (tbody) tbody.innerHTML =
+        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#ef4444;">Failed to load  ${message}</td></tr>`;
 }
 
 // ---------------------------------------------------------------------------
-// Charts (unchanged — using CHART_COLOURS from constants.js)
+// Charts
 // ---------------------------------------------------------------------------
 function renderPieChart() {
     const chartDiv = document.getElementById('pieChart');
-    if (!allTransactions.length) { chartDiv.innerHTML = '<p class="text-center text-gray-400 py-8">No data yet</p>'; return; }
+    if (!allTransactions.length) {
+        chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>';
+        return;
+    }
 
     const categoryTotals = {};
     allTransactions.filter(t => t.amount < 0).forEach(t => {
@@ -258,7 +286,10 @@ function renderPieChart() {
 
 function renderLineChart() {
     const chartDiv = document.getElementById('lineChart');
-    if (!allTransactions.length) { chartDiv.innerHTML = '<p class="text-center text-gray-400 py-8">No data yet</p>'; return; }
+    if (!allTransactions.length) {
+        chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>';
+        return;
+    }
 
     const monthlyData = {};
     allTransactions.filter(t => t.amount < 0).forEach(t => {
@@ -287,7 +318,10 @@ function renderLineChart() {
 function renderCategorySpendingChart() {
     const chartDiv = document.getElementById('categorySpendingChart');
     if (!chartDiv) return;
-    if (!allTransactions.length) { chartDiv.innerHTML = '<p class="text-center text-gray-400 py-8">No data yet</p>'; return; }
+    if (!allTransactions.length) {
+        chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>';
+        return;
+    }
 
     const monthlyData = {};
     const spendingTxns = allTransactions.filter(t => t.amount < 0);
@@ -297,6 +331,7 @@ function renderCategorySpendingChart() {
         if (!monthlyData[month]) monthlyData[month] = {};
         monthlyData[month][cat] = (monthlyData[month][cat] || 0) + Math.abs(t.amount);
     });
+
     const months = Object.keys(monthlyData).sort();
     const categories = [...new Set(spendingTxns.map(t => t.category || 'Uncategorized'))];
 
@@ -321,7 +356,7 @@ function renderCategorySpendingChart() {
 }
 
 // ---------------------------------------------------------------------------
-// Table: filter, sort, render (unchanged)
+// Table: populate, filter, sort, render
 // ---------------------------------------------------------------------------
 function populateCategoryFilter() {
     const filterSelect = document.getElementById('categoryFilter');
@@ -355,18 +390,18 @@ function sortTable(column) {
         currentSort.direction = column === 'date' ? 'desc' : 'asc';
     }
 
-    document.getElementById('sortDate').textContent = '↕️';
-    document.getElementById('sortCategory').textContent = '↕️';
-    document.getElementById('sortAmount').textContent = '↕️';
+    ['Date', 'Category', 'Amount'].forEach(col =>
+        document.getElementById(`sort${col}`).textContent = '↕️'
+    );
     const indicator = currentSort.direction === 'asc' ? '↑' : '↓';
     document.getElementById(`sort${column.charAt(0).toUpperCase() + column.slice(1)}`).textContent = indicator;
 
     filteredTransactions.sort((a, b) => {
         let aVal, bVal;
         switch (column) {
-            case 'date':     aVal = new Date(a.date);          bVal = new Date(b.date);          break;
-            case 'amount':   aVal = Math.abs(a.amount);        bVal = Math.abs(b.amount);        break;
-            case 'category': aVal = a.category.toLowerCase();  bVal = b.category.toLowerCase();  break;
+            case 'date':     aVal = new Date(a.date);         bVal = new Date(b.date);         break;
+            case 'amount':   aVal = Math.abs(a.amount);       bVal = Math.abs(b.amount);       break;
+            case 'category': aVal = a.category.toLowerCase(); bVal = b.category.toLowerCase(); break;
             default: return 0;
         }
         if (aVal < bVal) return currentSort.direction === 'asc' ? -1 : 1;
@@ -379,19 +414,19 @@ function sortTable(column) {
 function renderTransactionsTable() {
     const tbody = document.getElementById('transactionsTable');
     if (!filteredTransactions || filteredTransactions.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-gray-400">No transactions match your filters</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">No transactions match your filters</td></tr>`;
         return;
     }
     tbody.innerHTML = filteredTransactions.map(t => `
-        <tr class="hover:bg-gray-50 border-b border-gray-100">
-            <td class="px-4 py-3 text-sm text-gray-600">${t.date}</td>
-            <td class="px-4 py-3 text-sm text-gray-800">${t.description}</td>
-            <td class="px-4 py-3 text-sm font-medium ${t.amount < 0 ? 'text-red-600' : 'text-green-600'}">
-                £${Math.abs(t.amount).toFixed(2)}
+        <tr>
+            <td>${t.date}</td>
+            <td>${t.description}</td>
+            <td style="text-align:right; font-weight:600; color:${t.amount < 0 ? '#ef4444' : '#10b981'}">
+                ${t.amount < 0 ? '-' : '+'}£${Math.abs(t.amount).toFixed(2)}
             </td>
-            <td class="px-4 py-3 text-sm">
+            <td>
                 <select onchange="updateCategory('${t.id}', this.value)"
-                    class="text-xs border border-gray-200 rounded px-2 py-1 bg-white">
+                    style="font-size:0.75rem; border:1px solid #d1d5db; border-radius:0.375rem; padding:0.25rem 0.5rem; background:white;">
                     ${allCategories.map(cat =>
                         `<option value="${cat}" ${t.category === cat ? 'selected' : ''}>${cat}</option>`
                     ).join('')}
@@ -411,6 +446,11 @@ async function updateCategory(transactionId, category) {
     }
 }
 
-function calculateMetrics() {
-    // Preserve existing implementation
-}
+// ---------------------------------------------------------------------------
+// Expose all onclick-bound functions to window — must be last in the file
+// ---------------------------------------------------------------------------
+window.uploadFiles       = uploadFiles;
+window.fixUncategorised  = fixUncategorised;
+window.sortTable         = sortTable;
+window.filterAndRenderTable = filterAndRenderTable;
+window.updateCategory    = updateCategory;
