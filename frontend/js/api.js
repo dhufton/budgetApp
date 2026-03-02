@@ -232,4 +232,39 @@ const api = {
             throw error;
         }
     },
+
+    async categoriseTransactions() {
+        try {
+            const response = await authFetch(ENDPOINTS.categorise, { method: 'POST' });
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to categorise transactions:', error);
+            throw error;
+        }
+    },
+    async getInsights() {
+        try {
+            const response = await authFetch(ENDPOINTS.insights);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch insights:', error);
+            throw error;
+        }
+    },
+
+    async getBudgetSuggestions() {
+        try {
+            const response = await authFetch(ENDPOINTS.budgetSuggestions);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget suggestions:', error);
+            throw error;
+        }
+    },
 };

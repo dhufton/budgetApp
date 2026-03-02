@@ -31,4 +31,7 @@ const ENDPOINTS = {
   budgetTarget:       (name) => `/api/budget-targets/${encodeURIComponent(name)}`,
   budgetComparison:   '/api/budget-comparison',
   config:             '/api/config',
+  categorise:         '/api/categorise',
+  insights:           '/api/insights',
+  budgetSuggestions:  '/api/budget-suggestions',
 };
