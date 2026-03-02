@@ -15,7 +15,7 @@ from src.ingestion.storage import save_uploaded_file, get_all_statement_paths
 from src.ingestion.parser import ChaseStatementParser, AmexCSVParser
 from api.auth import get_current_user
 from api.dependencies import get_groq_service
-from groq_service import GroqService
+from api.groq_service import GroqService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
