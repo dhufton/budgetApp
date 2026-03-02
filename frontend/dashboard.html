@@ -8,16 +8,89 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* Sticky table header inside scrollable container */
+        .table-scroll-wrapper {
+            height: 520px;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+        }
+        .table-scroll-wrapper table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: 600px;
+        }
+        .table-scroll-wrapper thead th {
+            position: sticky;
+            top: 0;
+            background: #f9fafb;
+            z-index: 1;
+            border-bottom: 2px solid #e5e7eb;
+            white-space: nowrap;
+        }
+        .table-scroll-wrapper tbody tr:hover {
+            background-color: #f9fafb;
+        }
+        .table-scroll-wrapper tbody tr {
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        /* Pagination controls */
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 0;
+            font-size: 0.875rem;
+            color: #6b7280;
+        }
+        .pagination-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .pagination-btn {
+            padding: 0.375rem 0.75rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            background: white;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: background 0.15s;
+        }
+        .pagination-btn:hover:not(:disabled) {
+            background: #f3f4f6;
+        }
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .pagination-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .page-size-select {
+            padding: 0.375rem 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            background: white;
+        }
+    </style>
 </head>
 <body>
     <div class="container dashboard">
+
         <!-- Header -->
         <div class="dashboard-header">
             <h1>📊 Budget Dashboard</h1>
             <div class="user-info">
-                <a href="/settings" style="text-decoration: none; color: #667eea; font-weight: 600; margin-right: 1rem;">⚙️ Settings</a>
+                <a href="/settings" style="text-decoration:none; color:#667eea; font-weight:600; margin-right:1rem;">⚙️ Settings</a>
                 <span class="user-email" id="userEmail">user@example.com</span>
-                <button onclick="logout()" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;">Logout</button>
+                <button onclick="logout()" class="btn btn-secondary" style="width:auto; padding:0.5rem 1rem;">Logout</button>
             </div>
         </div>
 
@@ -37,38 +110,37 @@
             </div>
         </div>
 
-        <!-- Alert -->
-        <div id="uncategorizedAlert" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 flex items-center justify-between">
+        <!-- Uncategorised alert -->
+        <div id="uncategorizedAlert" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <span class="text-yellow-600 text-xl">⚠️</span>
                 <span id="uncategorizedCount" class="text-yellow-800 font-medium"></span>
             </div>
             <button
-                onclick="fixUncategorised()"
                 id="fixCategoriesBtn"
                 class="bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">
                 ✨ Fix with AI
             </button>
         </div>
 
-        <div id="insightsCard" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+        <!-- AI Insights card -->
+        <div id="insightsCard" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
             <div class="flex items-start gap-3">
                 <span class="text-blue-500 text-xl mt-0.5">🤖</span>
                 <div class="flex-1">
                     <h3 class="text-blue-800 font-semibold text-sm mb-1">AI Spending Insight</h3>
                     <p id="insightsText" class="text-blue-700 text-sm leading-relaxed"></p>
                 </div>
-                <button onclick="document.getElementById('insightsCard').classList.add('hidden')"
-                    class="text-blue-400 hover:text-blue-600 text-lg leading-none">✕</button>
+                <button id="dismissInsightsBtn" class="text-blue-400 hover:text-blue-600 text-lg leading-none">✕</button>
             </div>
         </div>
 
-        <!-- Upload Section -->
+        <!-- Upload -->
         <div class="upload-section">
             <h2>Upload Bank Statement</h2>
             <div class="file-input-wrapper">
                 <input type="file" id="fileInput" accept=".pdf,.csv" multiple>
-                <button onclick="uploadFiles()" class="btn">Upload</button>
+                <button id="uploadBtn" class="btn">Upload</button>
             </div>
             <div id="uploadStatus"></div>
         </div>
@@ -90,56 +162,81 @@
             <div id="categorySpendingChart"></div>
         </div>
 
-        <!-- Transactions Table -->
+        <!-- Transactions -->
         <div class="transactions-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h2>Transactions</h2>
-                <div style="display: flex; gap: 1rem; align-items: center;">
+
+            <!-- Table toolbar -->
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.75rem;">
+                <h2 style="margin:0;">Transactions</h2>
+                <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
                     <input
                         type="text"
                         id="searchInput"
-                        placeholder="Search description..."
-                        style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; width: 200px;"
-                        oninput="filterAndRenderTable()"
+                        placeholder="🔍 Search description..."
+                        style="padding:0.5rem 0.75rem; border:1px solid #d1d5db; border-radius:0.375rem; width:210px; font-size:0.875rem;"
                     />
                     <select
                         id="categoryFilter"
-                        style="padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem;"
-                        onchange="filterAndRenderTable()"
-                    >
+                        style="padding:0.5rem; border:1px solid #d1d5db; border-radius:0.375rem; font-size:0.875rem;">
                         <option value="all">All Categories</option>
                     </select>
-                    <span id="transactionCount" style="color: #6b7280; font-size: 0.875rem;"></span>
                 </div>
             </div>
 
-            <div style="overflow-x: auto;">
+            <!-- Scrollable table -->
+            <div class="table-scroll-wrapper">
                 <table>
                     <thead>
                         <tr>
-                            <th style="cursor: pointer;" onclick="sortTable('date')">
+                            <th style="padding:0.75rem 1rem; text-align:left; cursor:pointer;" id="thDate">
                                 Date <span id="sortDate">↕️</span>
                             </th>
-                            <th>Description</th>
-                            <th style="cursor: pointer;" onclick="sortTable('category')">
+                            <th style="padding:0.75rem 1rem; text-align:left;">Description</th>
+                            <th style="padding:0.75rem 1rem; text-align:left; cursor:pointer;" id="thCategory">
                                 Category <span id="sortCategory">↕️</span>
                             </th>
-                            <th style="text-align: right; cursor: pointer;" onclick="sortTable('amount')">
+                            <th style="padding:0.75rem 1rem; text-align:right; cursor:pointer;" id="thAmount">
                                 Amount <span id="sortAmount">↕️</span>
                             </th>
                         </tr>
                     </thead>
                     <tbody id="transactionsTable">
                         <tr>
-                            <td colspan="4" class="text-center" style="padding: 2rem;">
+                            <td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">
                                 <div class="loading"></div>
-                                <p style="margin-top: 0.5rem; color: #6b7280;">Loading transactions...</p>
+                                <p style="margin-top:0.5rem;">Loading transactions...</p>
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
+
+            <!-- Pagination -->
+            <div class="pagination">
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                    <span id="transactionCount"></span>
+                    <label style="display:flex; align-items:center; gap:0.375rem;">
+                        Rows:
+                        <select id="pageSizeSelect" class="page-size-select">
+                            <option value="25">25</option>
+                            <option value="50" selected>50</option>
+                            <option value="100">100</option>
+                            <option value="250">250</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="pagination-buttons">
+                    <button id="btnFirst"    class="pagination-btn">«</button>
+                    <button id="btnPrev"     class="pagination-btn">‹ Prev</button>
+                    <span   id="pageIndicator" style="padding:0 0.5rem; white-space:nowrap;"></span>
+                    <button id="btnNext"     class="pagination-btn">Next ›</button>
+                    <button id="btnLast"     class="pagination-btn">»</button>
+                </div>
+            </div>
+
         </div>
+    </div>
+
     <script src="/js/constants.js"></script>
     <script src="/js/auth.js"></script>
     <script src="/js/api.js"></script>
