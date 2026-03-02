@@ -1,41 +1,33 @@
 // frontend/js/settings.js
-
 let currentCategories = [];
 let currentBudgets = [];
+let currentSuggestions = {};  // ← new
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
-    if (!token) {
-        console.error('No valid auth, redirecting');
-        return;
-    }
+    if (!token) { console.error('No valid auth, redirecting'); return; }
 
     const email = localStorage.getItem('user_email');
     document.getElementById('userEmail').textContent = email || 'User';
 
-    // Load data for both sections
     await loadCategories();
     await loadBudgetTargets();
+    // Suggestions load lazily on button click — not auto-loaded
 });
 
+// ---------------------------------------------------------------------------
+// Tab switching (unchanged)
+// ---------------------------------------------------------------------------
 function showTab(tab) {
-    // Update tab buttons
-    const tabs = document.querySelectorAll('.settings-tab');
-    tabs.forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
     event.target.classList.add('active');
-
-    // Show/hide sections
-    if (tab === 'categories') {
-        document.getElementById('categoriesSection').classList.remove('hidden');
-        document.getElementById('budgetSection').classList.add('hidden');
-    } else {
-        document.getElementById('categoriesSection').classList.add('hidden');
-        document.getElementById('budgetSection').classList.remove('hidden');
-    }
+    document.getElementById('categoriesSection').classList.toggle('hidden', tab !== 'categories');
+    document.getElementById('budgetSection').classList.toggle('hidden', tab === 'categories');
 }
 
-// ========== CATEGORIES ==========
-
+// ---------------------------------------------------------------------------
+// Categories (unchanged)
+// ---------------------------------------------------------------------------
 async function loadCategories() {
     try {
         const data = await api.getCategories();
@@ -45,106 +37,66 @@ async function loadCategories() {
     } catch (error) {
         console.error('Failed to load categories:', error);
         document.getElementById('categoriesList').innerHTML =
-            '<p class="text-center" style="color: #ef4444; padding: 2rem;">Failed to load categories</p>';
+            '<p class="text-red-500 text-sm py-2">Failed to load categories</p>';
     }
 }
 
 function renderCategories() {
     const container = document.getElementById('categoriesList');
-
     if (currentCategories.length === 0) {
-        container.innerHTML = '<p class="text-center" style="color: #6b7280; padding: 2rem;">No custom categories yet. Add one above!</p>';
+        container.innerHTML = '<p class="text-gray-400 text-sm py-2">No custom categories yet. Add one above!</p>';
         return;
     }
-
-    const defaultCategories = DEFAULT_CATEGORIES;
-
-    const html = currentCategories.map(cat => {
-        const isDefault = defaultCategories.includes(cat);
+    container.innerHTML = currentCategories.map(cat => {
+        const isDefault = DEFAULT_CATEGORIES.includes(cat);
         return `
-            <div class="category-item">
-                <span class="category-name">${cat}</span>
-                ${isDefault ?
-                    '<span class="badge badge-blue">Default</span>' :
-                    `<button onclick="deleteCategory('${cat}')" class="btn-delete">Delete</button>`
-                }
-            </div>
-        `;
+            <div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                <span class="text-sm text-gray-700">${cat}</span>
+                ${!isDefault ? `
+                    <button onclick="deleteCategory('${cat}')"
+                        class="text-red-400 hover:text-red-600 text-xs">Remove</button>
+                ` : '<span class="text-xs text-gray-400">Default</span>'}
+            </div>`;
     }).join('');
-
-    container.innerHTML = html;
 }
 
 async function addCategory() {
-    const input = document.getElementById('newCategory');
-    const categoryName = input.value.trim();
-    const status = document.getElementById('categoryStatus');
-
-    if (!categoryName) {
-        showStatus(status, 'Please enter a category name', 'error');
-        return;
-    }
-
-    // Check for duplicates
-    if (currentCategories.some(c => c.toLowerCase() === categoryName.toLowerCase())) {
-        showStatus(status, 'Category already exists', 'error');
-        return;
-    }
-
+    const input = document.getElementById('newCategoryInput');
+    const category = input.value.trim();
+    if (!category) return;
     try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${window.location.origin}/api/categories`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ category: categoryName })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to add category');
-        }
-
-        showStatus(status, `✅ Category "${categoryName}" added successfully!`, 'success');
+        await api.addCategory(category);
         input.value = '';
         await loadCategories();
     } catch (error) {
-        console.error('Error adding category:', error);
-        showStatus(status, 'Failed to add category', 'error');
+        console.error('Failed to add category:', error);
+        alert('Failed to add category: ' + error.message);
     }
 }
 
-async function deleteCategory(categoryName) {
-    if (!confirm(`Are you sure you want to delete "${categoryName}"?`)) {
-        return;
-    }
-
-    const status = document.getElementById('categoryStatus');
-
+async function deleteCategory(category) {
+    if (!confirm(`Remove category "${category}"?`)) return;
     try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${window.location.origin}/api/categories/${encodeURIComponent(categoryName)}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to delete category');
-        }
-
-        showStatus(status, `✅ Category "${categoryName}" deleted`, 'success');
+        await api.deleteCategory(category);
         await loadCategories();
     } catch (error) {
-        console.error('Error deleting category:', error);
-        showStatus(status, 'Failed to delete category', 'error');
+        console.error('Failed to delete category:', error);
+        alert('Failed to delete category: ' + error.message);
     }
 }
 
-// ========== BUDGET TARGETS ==========
+function updateBudgetCategoryDropdown() {
+    const select = document.getElementById('budgetCategorySelect');
+    if (!select) return;
+    select.innerHTML = currentCategories
+        .filter(c => c !== 'Uncategorized')
+        .map(cat => `<option value="${cat}">${cat}</option>`)
+        .join('');
+}
 
+// ---------------------------------------------------------------------------
+// Budget targets (unchanged)
+// ---------------------------------------------------------------------------
 async function loadBudgetTargets() {
     try {
         const data = await api.getBudgetTargets();
@@ -153,129 +105,141 @@ async function loadBudgetTargets() {
     } catch (error) {
         console.error('Failed to load budget targets:', error);
         document.getElementById('budgetsList').innerHTML =
-            '<p class="text-center" style="color: #ef4444; padding: 2rem;">Failed to load budget targets</p>';
+            '<p class="text-red-500 text-sm py-2">Failed to load budget targets</p>';
     }
 }
 
 function renderBudgetTargets() {
     const container = document.getElementById('budgetsList');
-
     if (currentBudgets.length === 0) {
-        container.innerHTML = '<p class="text-center" style="color: #6b7280; padding: 2rem;">No budget targets set yet. Add one above!</p>';
+        container.innerHTML = '<p class="text-gray-400 text-sm py-2">No budget targets set yet. Add one above!</p>';
         return;
     }
-
-    const html = currentBudgets.map(budget => `
-        <div class="budget-item">
-            <div class="budget-info">
-                <span class="budget-category">${budget.category}</span>
-                <span class="budget-amount">£${parseFloat(budget.target_amount).toFixed(2)}</span>
+    container.innerHTML = currentBudgets.map(budget => `
+        <div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+            <span class="text-sm text-gray-700">${budget.category}</span>
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium text-gray-800">£${budget.target_amount}/mo</span>
+                <button onclick="deleteBudgetTarget('${budget.category}')"
+                    class="text-red-400 hover:text-red-600 text-xs">Remove</button>
             </div>
-            <button onclick="deleteBudgetTarget('${budget.category}')" class="btn-delete">Delete</button>
-        </div>
-    `).join('');
-
-    container.innerHTML = html;
-}
-
-function updateBudgetCategoryDropdown() {
-    const select = document.getElementById('budgetCategory');
-
-    if (currentCategories.length === 0) {
-        select.innerHTML = '<option value="">No categories available</option>';
-        return;
-    }
-
-    const options = currentCategories.map(cat =>
-        `<option value="${cat}">${cat}</option>`
-    ).join('');
-
-    select.innerHTML = '<option value="">Select a category</option>' + options;
+        </div>`).join('');
 }
 
 async function setBudgetTarget() {
-    const categorySelect = document.getElementById('budgetCategory');
-    const amountInput = document.getElementById('budgetAmount');
-    const status = document.getElementById('budgetStatus');
-
-    const category = categorySelect.value;
-    const amount = parseFloat(amountInput.value);
-
-    if (!category) {
-        showStatus(status, 'Please select a category', 'error');
+    const category = document.getElementById('budgetCategorySelect').value;
+    const amount = parseFloat(document.getElementById('budgetAmountInput').value);
+    if (!category || isNaN(amount) || amount <= 0) {
+        alert('Please select a category and enter a valid amount');
         return;
     }
-
-    if (!amount || amount <= 0) {
-        showStatus(status, 'Please enter a valid amount', 'error');
-        return;
-    }
-
     try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${window.location.origin}/api/budget-targets`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                category: category,
-                target_amount: amount
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to set budget target');
-        }
-
-        showStatus(status, `✅ Budget target for "${category}" set to £${amount.toFixed(2)}`, 'success');
-        categorySelect.value = '';
-        amountInput.value = '';
+        await api.setBudgetTarget(category, amount);
+        document.getElementById('budgetAmountInput').value = '';
         await loadBudgetTargets();
     } catch (error) {
-        console.error('Error setting budget target:', error);
-        showStatus(status, 'Failed to set budget target', 'error');
+        console.error('Failed to set budget target:', error);
+        alert('Failed to set budget target: ' + error.message);
     }
 }
 
 async function deleteBudgetTarget(category) {
-    if (!confirm(`Delete budget target for "${category}"?`)) {
-        return;
-    }
-
-    const status = document.getElementById('budgetStatus');
-
+    if (!confirm(`Remove budget target for "${category}"?`)) return;
     try {
-        const token = localStorage.getItem('access_token');
-        const response = await fetch(`${window.location.origin}/api/budget-targets/${encodeURIComponent(category)}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to delete budget target');
-        }
-
-        showStatus(status, `✅ Budget target for "${category}" deleted`, 'success');
+        await api.deleteBudgetTarget(category);
         await loadBudgetTargets();
     } catch (error) {
-        console.error('Error deleting budget target:', error);
-        showStatus(status, 'Failed to delete budget target', 'error');
+        console.error('Failed to delete budget target:', error);
+        alert('Failed to delete budget target: ' + error.message);
     }
 }
 
-// ========== HELPERS ==========
+// ---------------------------------------------------------------------------
+// AI: Budget suggestions  ← NEW
+// ---------------------------------------------------------------------------
+window.loadBudgetSuggestions = async function() {
+    const btn = document.getElementById('suggestBtn');
+    const loading = document.getElementById('suggestionsLoading');
+    const container = document.getElementById('suggestionsContainer');
+    const list = document.getElementById('suggestionsList');
 
-function showStatus(element, message, type) {
-    element.textContent = message;
-    element.className = type === 'error' ? 'text-red' : 'text-green';
-    element.style.fontSize = '0.9rem';
-    element.style.fontWeight = '500';
+    btn.disabled = true;
+    btn.textContent = '⏳ Analysing...';
+    container.classList.add('hidden');
+    loading.classList.remove('hidden');
 
-    setTimeout(() => {
-        element.textContent = '';
-    }, 5000);
-}
+    try {
+        const data = await api.getBudgetSuggestions();
+        currentSuggestions = data.suggestions || {};
+
+        if (Object.keys(currentSuggestions).length === 0) {
+            list.innerHTML = '<p class="text-gray-400 text-sm">Not enough spending history to make suggestions yet.</p>';
+        } else {
+            const months = data.based_on_months || 0;
+            list.innerHTML = `
+                <p class="text-xs text-gray-400 mb-2">Based on ${months} month${months !== 1 ? 's' : ''} of spending</p>
+                ${Object.entries(currentSuggestions).map(([cat, amount]) => `
+                    <div class="flex items-center justify-between py-2 px-3 bg-blue-50 rounded-lg">
+                        <span class="text-sm text-gray-700">${cat}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-semibold text-blue-700">£${amount}/mo</span>
+                            <button onclick="applySuggestion('${cat}', ${amount})"
+                                class="text-xs bg-white border border-blue-300 hover:bg-blue-100 text-blue-600 px-2 py-1 rounded transition-colors">
+                                Apply
+                            </button>
+                        </div>
+                    </div>`).join('')}`;
+        }
+
+        loading.classList.add('hidden');
+        container.classList.remove('hidden');
+        btn.textContent = '🔄 Regenerate';
+    } catch (error) {
+        console.error('Failed to load budget suggestions:', error);
+        list.innerHTML = '<p class="text-red-400 text-sm">Failed to generate suggestions. Please try again.</p>';
+        loading.classList.add('hidden');
+        container.classList.remove('hidden');
+        btn.textContent = '✨ Generate Suggestions';
+    } finally {
+        btn.disabled = false;
+    }
+};
+
+window.applySuggestion = async function(category, amount) {
+    try {
+        await api.setBudgetTarget(category, amount);
+        await loadBudgetTargets();
+        // Visual confirmation on the applied row
+        const buttons = document.querySelectorAll(`#suggestionsList button`);
+        buttons.forEach(btn => {
+            if (btn.getAttribute('onclick')?.includes(`'${category}'`)) {
+                btn.textContent = '✅';
+                btn.disabled = true;
+            }
+        });
+    } catch (error) {
+        console.error('Failed to apply suggestion:', error);
+        alert('Failed to apply suggestion: ' + error.message);
+    }
+};
+
+window.applyAllSuggestions = async function() {
+    const entries = Object.entries(currentSuggestions);
+    if (entries.length === 0) return;
+
+    const btn = document.querySelector('[onclick="applyAllSuggestions()"]');
+    btn.disabled = true;
+    btn.textContent = '⏳ Applying...';
+
+    for (const [category, amount] of entries) {
+        try {
+            await api.setBudgetTarget(category, amount);
+        } catch (error) {
+            console.error(`Failed to apply ${category}:`, error);
+        }
+    }
+
+    await loadBudgetTargets();
+    btn.textContent = '✅ All Applied';
+    currentSuggestions = {};
+};

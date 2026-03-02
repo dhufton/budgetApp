@@ -82,6 +82,30 @@
                 </div>
                 <div id="budgetStatus" style="margin-top: 0.75rem;"></div>
 
+                <!-- ADD inside budgetSection, above the budgetsList div -->
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-gray-700">AI Suggested Targets</h3>
+                        <button
+                            onclick="loadBudgetSuggestions()"
+                            id="suggestBtn"
+                            class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium px-3 py-1.5 rounded-lg transition-colors">
+                            ✨ Generate Suggestions
+                        </button>
+                    </div>
+                    <div id="suggestionsContainer" class="hidden">
+                        <div id="suggestionsList" class="space-y-2 mb-3"></div>
+                        <button
+                            onclick="applyAllSuggestions()"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded-lg transition-colors">
+                            Apply All Suggestions
+                        </button>
+                    </div>
+                    <div id="suggestionsLoading" class="hidden text-sm text-gray-500 italic py-2">
+                        🤖 Analysing your spending patterns...
+                    </div>
+                </div>
+
                 <!-- Budget Targets List -->
                 <div style="margin-top: 2rem;">
                     <h3 style="font-size: 1rem; margin-bottom: 1rem; color: #374151;">Current Targets</h3>
