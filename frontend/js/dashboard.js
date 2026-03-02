@@ -3,91 +3,89 @@
 // ---------------------------------------------------------------------------
 // Global state
 // ---------------------------------------------------------------------------
-let allTransactions    = [];
-let allCategories      = [];
+let allTransactions      = [];
+let allCategories        = [];
 let filteredTransactions = [];
-let currentSort        = { column: 'date', direction: 'desc' };
-let currentPage        = 1;
-let pageSize           = 50;
-let isLoading          = false;
+let currentSort          = { column: 'date', direction: 'desc' };
+let currentPage          = 1;
+let pageSize             = 50;
+let isLoading            = false;
 
 // ---------------------------------------------------------------------------
 // Initialise
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-    const token = await window.checkAuth();
-    if (!token) { console.error('No valid auth, redirecting'); return; }
+    try {
+        const token = await window.checkAuth();
+        if (!token) { console.error('No valid auth, redirecting'); return; }
 
-    document.getElementById('userEmail').textContent =
-        localStorage.getItem('user_email') || 'User';
+        document.getElementById('userEmail').textContent =
+            localStorage.getItem('user_email') || 'User';
 
-    // Button events
-    document.getElementById('uploadBtn')
-        .addEventListener('click', uploadFiles);
-
-    document.getElementById('fixCategoriesBtn')
-        .addEventListener('click', fixUncategorised);
-
-    document.getElementById('dismissInsightsBtn')
-        .addEventListener('click', () =>
-            document.getElementById('insightsCard').classList.add('hidden'));
-
-    // Table filter events
-    document.getElementById('searchInput')
-        .addEventListener('input', () => { currentPage = 1; filterAndRenderTable(); });
-
-    document.getElementById('categoryFilter')
-        .addEventListener('change', () => { currentPage = 1; filterAndRenderTable(); });
-
-    // Sort header events
-    document.getElementById('thDate')
-        .addEventListener('click', () => sortTable('date'));
-    document.getElementById('thCategory')
-        .addEventListener('click', () => sortTable('category'));
-    document.getElementById('thAmount')
-        .addEventListener('click', () => sortTable('amount'));
-
-    // Pagination events
-    document.getElementById('btnFirst')
-        .addEventListener('click', () => goToPage(1));
-    document.getElementById('btnPrev')
-        .addEventListener('click', () => goToPage(currentPage - 1));
-    document.getElementById('btnNext')
-        .addEventListener('click', () => goToPage(currentPage + 1));
-    document.getElementById('btnLast')
-        .addEventListener('click', () => goToPage(totalPages()));
-    document.getElementById('pageSizeSelect')
-        .addEventListener('change', (e) => {
+        bindEvent('uploadBtn',         'click',  uploadFiles);
+        bindEvent('fixCategoriesBtn',  'click',  fixUncategorised);
+        bindEvent('dismissInsightsBtn','click', () =>
+            document.getElementById('insightsCard')?.classList.add('hidden'));
+        bindEvent('searchInput',       'input',  () => { currentPage = 1; filterAndRenderTable(); });
+        bindEvent('categoryFilter',    'change', () => { currentPage = 1; filterAndRenderTable(); });
+        bindEvent('thDate',            'click',  () => sortTable('date'));
+        bindEvent('thCategory',        'click',  () => sortTable('category'));
+        bindEvent('thAmount',          'click',  () => sortTable('amount'));
+        bindEvent('btnFirst',          'click',  () => goToPage(1));
+        bindEvent('btnPrev',           'click',  () => goToPage(currentPage - 1));
+        bindEvent('btnNext',           'click',  () => goToPage(currentPage + 1));
+        bindEvent('btnLast',           'click',  () => goToPage(totalPages()));
+        bindEvent('pageSizeSelect',    'change', (e) => {
             pageSize = parseInt(e.target.value);
             currentPage = 1;
             renderTransactionsTable();
         });
 
-    // Category change delegation — handles dynamically rendered rows
-    document.getElementById('transactionsTable')
-        .addEventListener('change', async (e) => {
-            if (e.target.tagName === 'SELECT' && e.target.dataset.transactionId) {
-                await updateCategory(e.target.dataset.transactionId, e.target.value);
-            }
-        });
+        // Delegated listener for category dropdowns in dynamically rendered rows
+        document.getElementById('transactionsTable')
+            ?.addEventListener('change', async (e) => {
+                if (e.target.tagName === 'SELECT' && e.target.dataset.transactionId) {
+                    await updateCategory(e.target.dataset.transactionId, e.target.value);
+                }
+            });
 
-    showLoading(true);
-    await loadCategories();
-    await loadDashboard();
-    showLoading(false);
+        showLoading(true);
+        await loadCategories();
+        await loadDashboard();
+        showLoading(false);
+
+    } catch (err) {
+        // Surface any initialisation error so it's visible in the console
+        console.error('Dashboard initialisation failed:', err);
+    }
 });
+
+// ---------------------------------------------------------------------------
+// Helper: safely bind an event listener, logging if the element is missing
+// ---------------------------------------------------------------------------
+function bindEvent(id, event, handler) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.addEventListener(event, handler);
+    } else {
+        console.warn(`bindEvent: element #${id} not found — ${event} listener not attached`);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // File upload
 // ---------------------------------------------------------------------------
 async function uploadFiles() {
     const input = document.getElementById('fileInput');
-    const files = input.files;
-    if (files.length === 0) { alert('Please select files to upload'); return; }
+    if (!input || input.files.length === 0) {
+        alert('Please select a file to upload');
+        return;
+    }
 
     const status = document.getElementById('uploadStatus');
+    const files  = input.files;
     status.textContent = 'Uploading...';
-    status.className = 'mt-2 text-sm text-blue-600';
+    status.style.color = '#3b82f6';
 
     let successCount = 0, duplicateCount = 0, errorCount = 0;
 
@@ -96,20 +94,21 @@ async function uploadFiles() {
         formData.append('file', file);
         try {
             const result = await api.uploadFile(formData);
-            if (result.success) {
+            if (result?.success) {
                 successCount++;
                 status.textContent = `✅ Uploaded ${successCount}/${files.length} files`;
-                status.className = 'mt-2 text-sm text-green-600';
+                status.style.color = '#10b981';
             }
         } catch (error) {
+            console.error('Upload error:', error);
             if (error.message?.includes('already exists')) {
                 duplicateCount++;
                 status.textContent = `⚠️ ${file.name} already uploaded (skipping)`;
-                status.className = 'mt-2 text-sm text-yellow-600';
+                status.style.color = '#f59e0b';
             } else {
                 errorCount++;
                 status.textContent = `❌ Error uploading ${file.name}: ${error.message}`;
-                status.className = 'mt-2 text-sm text-red-600';
+                status.style.color = '#ef4444';
             }
         }
     }
@@ -121,7 +120,7 @@ async function uploadFiles() {
     if (errorCount > 0)     finalMessage += (finalMessage ? ', ' : '') + `❌ ${errorCount} error(s)`;
 
     status.textContent = finalMessage + '. Refreshing...';
-    status.className = successCount > 0 ? 'mt-2 text-sm text-green-600' : 'mt-2 text-sm text-yellow-600';
+    status.style.color  = successCount > 0 ? '#10b981' : '#f59e0b';
 
     if (successCount > 0) {
         setTimeout(async () => {
@@ -139,7 +138,7 @@ async function uploadFiles() {
 async function loadCategories() {
     try {
         const data = await api.getCategories();
-        allCategories = data.categories || DEFAULT_CATEGORIES;
+        allCategories = data?.categories || DEFAULT_CATEGORIES;
     } catch {
         allCategories = DEFAULT_CATEGORIES;
     }
@@ -151,7 +150,7 @@ async function loadCategories() {
 async function loadDashboard() {
     try {
         const data = await api.getTransactions();
-        if (!data || !data.transactions) { showEmptyState(); return; }
+        if (!data?.transactions) { showEmptyState(); return; }
 
         allTransactions      = data.transactions;
         filteredTransactions = [...allTransactions];
@@ -165,9 +164,11 @@ async function loadDashboard() {
             document.getElementById('uncategorizedCount').textContent =
                 `${uncategorizedCount} transaction${uncategorizedCount > 1 ? 's' : ''} need categorisation`;
             const btn = document.getElementById('fixCategoriesBtn');
-            btn.disabled = false;
-            btn.textContent = '✨ Fix with AI';
-            btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed');
+            if (btn) {
+                btn.disabled    = false;
+                btn.textContent = '✨ Fix with AI';
+                btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed');
+            }
         } else {
             document.getElementById('uncategorizedAlert').classList.add('hidden');
         }
@@ -211,10 +212,10 @@ async function loadInsights() {
 // AI: Fix uncategorised
 // ---------------------------------------------------------------------------
 async function fixUncategorised() {
-    const btn    = document.getElementById('fixCategoriesBtn');
+    const btn     = document.getElementById('fixCategoriesBtn');
     const countEl = document.getElementById('uncategorizedCount');
 
-    btn.disabled = true;
+    btn.disabled    = true;
     btn.textContent = '⏳ Categorising...';
     btn.classList.add('opacity-75', 'cursor-not-allowed');
 
@@ -230,14 +231,14 @@ async function fixUncategorised() {
             }, 1500);
         } else {
             countEl.textContent = 'No new categories found — try manually categorising remaining transactions';
-            btn.disabled = false;
+            btn.disabled    = false;
             btn.textContent = '✨ Fix with AI';
             btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     } catch (error) {
         console.error('Categorisation failed:', error);
         countEl.textContent = '❌ Categorisation failed — please try again';
-        btn.disabled = false;
+        btn.disabled    = false;
         btn.textContent = '✨ Fix with AI';
         btn.classList.remove('opacity-75', 'cursor-not-allowed');
     }
@@ -247,11 +248,9 @@ async function fixUncategorised() {
 // Metrics
 // ---------------------------------------------------------------------------
 function calculateMetrics() {
-    const spending = allTransactions
-        .filter(t => t.amount < 0)
+    const spending = allTransactions.filter(t => t.amount < 0)
         .reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const income = allTransactions
-        .filter(t => t.amount > 0)
+    const income = allTransactions.filter(t => t.amount > 0)
         .reduce((sum, t) => sum + t.amount, 0);
     const net = income - spending;
 
@@ -265,20 +264,19 @@ function calculateMetrics() {
 }
 
 // ---------------------------------------------------------------------------
-// Loading / empty / error states
+// States
 // ---------------------------------------------------------------------------
 function showLoading(loading) {
     isLoading = loading;
-    if (loading) {
-        document.getElementById('transactionsTable').innerHTML =
-            `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">Loading transactions...</td></tr>`;
-        document.getElementById('pieChart').innerHTML =
-            `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
-        document.getElementById('lineChart').innerHTML =
-            `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
-        document.getElementById('pageIndicator').textContent = '';
-        document.getElementById('transactionCount').textContent = '';
-    }
+    if (!loading) return;
+    document.getElementById('transactionsTable').innerHTML =
+        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">Loading transactions...</td></tr>`;
+    document.getElementById('pieChart').innerHTML =
+        `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
+    document.getElementById('lineChart').innerHTML =
+        `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
+    document.getElementById('pageIndicator').textContent   = '';
+    document.getElementById('transactionCount').textContent = '';
 }
 
 function showEmptyState() {
@@ -288,7 +286,7 @@ function showEmptyState() {
         `<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see spending breakdown</p>`;
     document.getElementById('lineChart').innerHTML =
         `<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see monthly trends</p>`;
-    document.getElementById('pageIndicator').textContent = '';
+    document.getElementById('pageIndicator').textContent   = '';
     document.getElementById('transactionCount').textContent = '';
 }
 
@@ -342,11 +340,9 @@ function renderLineChart() {
 
 function renderCategorySpendingChart() {
     const chartDiv = document.getElementById('categorySpendingChart');
-    if (!chartDiv || !allTransactions.length) {
-        if (chartDiv) chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>';
-        return;
-    }
-    const monthlyData = {};
+    if (!chartDiv) return;
+    if (!allTransactions.length) { chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>'; return; }
+    const monthlyData  = {};
     const spendingTxns = allTransactions.filter(t => t.amount < 0);
     spendingTxns.forEach(t => {
         const month = t.date.substring(0, 7);
@@ -372,7 +368,7 @@ function renderCategorySpendingChart() {
 }
 
 // ---------------------------------------------------------------------------
-// Table: filter, sort, paginate, render
+// Table
 // ---------------------------------------------------------------------------
 function populateCategoryFilter() {
     const sel = document.getElementById('categoryFilter');
@@ -384,13 +380,10 @@ function populateCategoryFilter() {
 function filterAndRenderTable() {
     const searchTerm     = document.getElementById('searchInput')?.value.toLowerCase() || '';
     const categoryFilter = document.getElementById('categoryFilter')?.value || 'all';
-
-    filteredTransactions = allTransactions.filter(t => {
-        const matchesSearch   = !searchTerm || t.description.toLowerCase().includes(searchTerm);
-        const matchesCategory = categoryFilter === 'all' || t.category === categoryFilter;
-        return matchesSearch && matchesCategory;
-    });
-
+    filteredTransactions = allTransactions.filter(t =>
+        (!searchTerm || t.description.toLowerCase().includes(searchTerm)) &&
+        (categoryFilter === 'all' || t.category === categoryFilter)
+    );
     currentPage = 1;
     renderTransactionsTable();
 }
@@ -402,12 +395,10 @@ function sortTable(column) {
         currentSort.column    = column;
         currentSort.direction = column === 'date' ? 'desc' : 'asc';
     }
-
     ['Date', 'Category', 'Amount'].forEach(col =>
         document.getElementById(`sort${col}`).textContent = '↕️');
     document.getElementById(`sort${column.charAt(0).toUpperCase() + column.slice(1)}`).textContent =
         currentSort.direction === 'asc' ? '↑' : '↓';
-
     filteredTransactions.sort((a, b) => {
         let aVal, bVal;
         switch (column) {
@@ -420,7 +411,6 @@ function sortTable(column) {
         if (aVal > bVal) return currentSort.direction === 'asc' ?  1 : -1;
         return 0;
     });
-
     currentPage = 1;
     renderTransactionsTable();
 }
@@ -430,8 +420,7 @@ function totalPages() {
 }
 
 function goToPage(page) {
-    const tp = totalPages();
-    currentPage = Math.min(Math.max(1, page), tp);
+    currentPage = Math.min(Math.max(1, page), totalPages());
     renderTransactionsTable();
 }
 
@@ -442,22 +431,22 @@ function renderTransactionsTable() {
     if (total === 0) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">No transactions match your filters</td></tr>`;
         document.getElementById('transactionCount').textContent = '0 transactions';
-        document.getElementById('pageIndicator').textContent = '';
+        document.getElementById('pageIndicator').textContent    = '';
         updatePaginationButtons(0);
         return;
     }
 
-    const tp         = totalPages();
-    const startIdx   = (currentPage - 1) * pageSize;
-    const endIdx     = Math.min(startIdx + pageSize, total);
-    const pageSlice  = filteredTransactions.slice(startIdx, endIdx);
+    const tp       = totalPages();
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx   = Math.min(startIdx + pageSize, total);
 
     document.getElementById('transactionCount').textContent =
-        `${total.toLocaleString()} transaction${total !== 1 ? 's' : ''}${total !== allTransactions.length ? ` (filtered from ${allTransactions.length.toLocaleString()})` : ''}`;
+        `${total.toLocaleString()} transaction${total !== 1 ? 's' : ''}` +
+        (total !== allTransactions.length ? ` (filtered from ${allTransactions.length.toLocaleString()})` : '');
     document.getElementById('pageIndicator').textContent =
-        `Page ${currentPage} of ${tp}  (${startIdx + 1}–${endIdx})`;
+        `Page ${currentPage} of ${tp} (${startIdx + 1}–${endIdx})`;
 
-    tbody.innerHTML = pageSlice.map(t => `
+    tbody.innerHTML = filteredTransactions.slice(startIdx, endIdx).map(t => `
         <tr>
             <td style="padding:0.6rem 1rem; font-size:0.875rem; color:#6b7280; white-space:nowrap;">${t.date}</td>
             <td style="padding:0.6rem 1rem; font-size:0.875rem; color:#1f2937; max-width:320px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${t.description}">${t.description}</td>
@@ -475,7 +464,6 @@ function renderTransactionsTable() {
         </tr>`).join('');
 
     updatePaginationButtons(tp);
-    // Scroll table back to top on page change
     document.querySelector('.table-scroll-wrapper').scrollTop = 0;
 }
 
