@@ -15,6 +15,7 @@ let isLoading            = false;
 // Initialise
 // ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('[DOMContentLoaded] dashboard init starting');
     try {
         const token = await window.checkAuth();
         if (!token) { console.error('No valid auth, redirecting'); return; }
@@ -76,6 +77,9 @@ function bindEvent(id, event, handler) {
 // File upload
 // ---------------------------------------------------------------------------
 async function uploadFiles() {
+async function uploadFiles() {
+    console.log('[uploadFiles] called');
+    console.log('[uploadFiles] token:', !!localStorage.getItem('access_token'));
     const input = document.getElementById('fileInput');
     if (!input || input.files.length === 0) {
         alert('Please select a file to upload');
