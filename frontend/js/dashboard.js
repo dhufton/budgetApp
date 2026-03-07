@@ -273,30 +273,32 @@ function calculateMetrics() {
 function showLoading(loading) {
     isLoading = loading;
     if (!loading) return;
-    document.getElementById('transactionsTable').innerHTML =
-        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">Loading transactions...</td></tr>`;
-    document.getElementById('pieChart').innerHTML =
-        `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
-    document.getElementById('lineChart').innerHTML =
-        `<p style="text-align:center; color:#6b7280; padding:2rem;">Loading chart...</p>`;
-    document.getElementById('pageIndicator').textContent   = '';
-    document.getElementById('transactionCount').textContent = '';
+    const tbody = document.getElementById('transactionsTable');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">
+        <div class="loading"></div><p style="margin-top:0.5rem">Loading transactions...</p>
+    </td></tr>`;
+    const pieChart = document.getElementById('pieChart');
+    if (pieChart) pieChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Loading chart...</p>`;
+    const lineChart = document.getElementById('lineChart');
+    if (lineChart) lineChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Loading chart...</p>`;
 }
 
 function showEmptyState() {
-    document.getElementById('transactionsTable').innerHTML =
-        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#6b7280;">No transactions yet — upload a bank statement to get started!</td></tr>`;
-    document.getElementById('pieChart').innerHTML =
-        `<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see spending breakdown</p>`;
-    document.getElementById('lineChart').innerHTML =
-        `<p style="text-align:center; color:#6b7280; padding:2rem;">Upload a statement to see monthly trends</p>`;
-    document.getElementById('pageIndicator').textContent   = '';
-    document.getElementById('transactionCount').textContent = '';
+    const tbody = document.getElementById('transactionsTable');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">
+        No transactions yet — upload a bank statement to get started!
+    </td></tr>`;
+    const pieChart = document.getElementById('pieChart');
+    if (pieChart) pieChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Upload a statement to see spending breakdown</p>`;
+    const lineChart = document.getElementById('lineChart');
+    if (lineChart) lineChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Upload a statement to see monthly trends</p>`;
 }
 
 function showErrorState(message) {
-    document.getElementById('transactionsTable').innerHTML =
-        `<tr><td colspan="4" style="text-align:center; padding:2rem; color:#ef4444;">Failed to load  ${message}</td></tr>`;
+    const tbody = document.getElementById('transactionsTable');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:#ef4444">
+        Failed to load: ${message}
+    </td></tr>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -304,7 +306,10 @@ function showErrorState(message) {
 // ---------------------------------------------------------------------------
 function renderPieChart() {
     const chartDiv = document.getElementById('pieChart');
-    if (!allTransactions.length) { chartDiv.innerHTML = '<p style="text-align:center; color:#6b7280; padding:2rem;">No data yet</p>'; return; }
+    if (!allTransactions.length) {
+        chartDiv.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">No data yet</p>`;
+        return;
+    }
     const categoryTotals = {};
     allTransactions.filter(t => t.amount < 0).forEach(t => {
         const cat = t.category || 'Uncategorized';
@@ -314,10 +319,12 @@ function renderPieChart() {
         values: Object.values(categoryTotals),
         labels: Object.keys(categoryTotals),
         type: 'pie',
-        marker: { colors: CHART_COLOURS },
+        marker: { colors: ['#3b82f6','#ef4444','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'] }
     }], {
-        height: 300, margin: { t: 0, b: 0, l: 0, r: 0 },
-        showlegend: true, legend: { orientation: 'h', y: -0.2 },
+        height: 300,
+        margin: { t: 0, b: 0, l: 0, r: 0 },
+        showlegend: true,
+        legend: { orientation: 'h', y: -0.2 }
     }, { responsive: true });
 }
 
