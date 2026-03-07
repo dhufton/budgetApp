@@ -1,139 +1,259 @@
 // frontend/js/api.js
 
+// ---------------------------------------------------------------------------
+// authFetch — attaches Bearer token; handles 401s; avoids setting
+// Content-Type for FormData (the browser must set it with the multipart boundary).
+// ---------------------------------------------------------------------------
 async function authFetch(url, options = {}) {
     const token = localStorage.getItem('access_token');
-    if (!token) throw new Error('Not authenticated');
+    if (!token) {
+        console.error('No token found, redirecting to login');
+        window.location.href = '/';
+        return null;
+    }
 
-    const response = await fetch(url, {
-        ...options,
-        headers: {
-            'Authorization': `Bearer ${token}`,
-            ...(options.headers || {}),
-        },
-    });
+    const headers = {
+        'Authorization': `Bearer ${token}`,
+        ...options.headers,
+    };
+
+    // Don't force Content-Type for FormData — browser sets it with the boundary
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(url, { ...options, headers });
 
     if (response.status === 401) {
+        console.error('Unauthorized - clearing token');
         localStorage.removeItem('access_token');
         window.location.href = '/';
-        throw new Error('Session expired');
+        return null;
     }
 
     return response;
 }
 
+// ---------------------------------------------------------------------------
+// API object
+// ---------------------------------------------------------------------------
 const api = {
+
     async getTransactions() {
-        console.log('Fetching transactions...');
-        const response = await authFetch('/api/transactions');
-        console.log('Transactions response:', response.status);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.transactions);
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch transactions:', error);
+            throw error;
+        }
     },
 
     async uploadFile(formData) {
-        const response = await authFetch('/api/upload', {
-            method: 'POST',
-            body: formData,
-        });
-        console.log('Upload response:', response.status);
-        const data = await response.json();
-        if (!response.ok) {
-            console.log('Upload failed:', new Error(data.detail || data.message || 'Upload failed'));
-            throw new Error(data.detail || data.message || 'Upload failed');
+        try {
+            const response = await authFetch(ENDPOINTS.upload, {
+                method: 'POST',
+                body: formData,
+            });
+            if (!response) return null;
+            console.log('Upload response:', response.status);
+            if (response.status === 409) {
+                const data = await response.json();
+                throw new Error(data.message || 'File already exists');
+            }
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Upload failed');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Upload failed:', error);
+            throw error;
         }
-        return data;
     },
 
     async getCategories() {
-        const response = await authFetch('/api/categories');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.categories);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch categories:', error);
+            throw error;
+        }
     },
 
-    // Create a new custom category (optionally with initial keywords)
+    // Create a new custom category (name + optional initial keywords)
     async createCustomCategory(name, keywords = []) {
-        const response = await authFetch('/api/categories', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, keywords }),
-        });
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.detail || 'Failed to create category');
+        try {
+            const response = await authFetch(ENDPOINTS.categories, {
+                method: 'POST',
+                body: JSON.stringify({ name, keywords }),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to create category');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to create category:', error);
+            throw error;
         }
-        return response.json();
     },
 
-    // Update the extra keywords for a category
+    // Save user-defined keywords for a category
     async updateCategoryKeywords(category, keywords) {
-        const response = await authFetch(`/api/categories/${encodeURIComponent(category)}/keywords`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ keywords }),
-        });
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.detail || 'Failed to update keywords');
+        try {
+            const response = await authFetch(ENDPOINTS.categoryKeywords(category), {
+                method: 'PATCH',
+                body: JSON.stringify({ keywords }),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to update keywords');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to update keywords:', error);
+            throw error;
         }
-        return response.json();
     },
 
     async deleteCategory(category) {
-        const response = await authFetch(`/api/categories/${encodeURIComponent(category)}`, {
-            method: 'DELETE',
-        });
-        if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.detail || 'Failed to delete category');
+        try {
+            const response = await authFetch(ENDPOINTS.category(category), {
+                method: 'DELETE',
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to delete category');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to delete category:', error);
+            throw error;
         }
-        return response.json();
     },
 
     async getBudgetTargets() {
-        const response = await authFetch('/api/budget-targets');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.budgetTargets);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget targets:', error);
+            throw error;
+        }
     },
 
     async setBudgetTarget(category, targetAmount) {
-        const response = await authFetch('/api/budget-targets', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, target_amount: targetAmount }),
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.budgetTargets, {
+                method: 'POST',
+                body: JSON.stringify({ category, target_amount: targetAmount }),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to set budget target');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to set budget target:', error);
+            throw error;
+        }
     },
 
     async deleteBudgetTarget(category) {
-        const response = await authFetch(`/api/budget-targets/${encodeURIComponent(category)}`, {
-            method: 'DELETE',
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.budgetTarget(category), {
+                method: 'DELETE',
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to delete budget target');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to delete budget target:', error);
+            throw error;
+        }
     },
 
     async getBudgetComparison() {
-        const response = await authFetch('/api/budget-comparison');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.budgetComparison);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget comparison:', error);
+            throw error;
+        }
+    },
+
+    async updateTransactionCategory(transactionId, category) {
+        try {
+            const response = await authFetch(ENDPOINTS.transactionCategory(transactionId), {
+                method: 'PATCH',
+                body: JSON.stringify({ category }),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to update category');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to update transaction category:', error);
+            throw error;
+        }
     },
 
     async categoriseTransactions() {
-        const response = await authFetch('/api/categorise', { method: 'POST' });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.categorise, { method: 'POST' });
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to categorise transactions:', error);
+            throw error;
+        }
     },
 
     async getInsights() {
-        const response = await authFetch('/api/insights');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.insights);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch insights:', error);
+            throw error;
+        }
     },
 
     async getBudgetSuggestions() {
-        const response = await authFetch('/api/budget-suggestions');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return response.json();
+        try {
+            const response = await authFetch(ENDPOINTS.budgetSuggestions);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget suggestions:', error);
+            throw error;
+        }
     },
 };
