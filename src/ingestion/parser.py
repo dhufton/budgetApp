@@ -7,12 +7,16 @@ from src.ingestion.learning import load_learned_rules
 
 logger = logging.getLogger(__name__)
 
-# Chase UK: "01 Feb 2026" â€” date on its own line
+# Chase UK statement format - each transaction spans multiple lines:
+#   01 Feb 2026
+#   Amazon
+#   Purchase
+#   -£53.61
+#   £508.88
+
 _DATE_RE       = re.compile(r'^\d{1,2}\s+[A-Za-z]{3}\s+\d{4}$')
-# Signed amount: "-Â£53.61" or "+Â£46.00" or "âˆ’Â£53.61" (Chase uses Unicode minus)
-_SIGNED_AMT_RE = re.compile(r'^[+\-\u2212]?Â£[\d,]+\.\d{2}$')
-# Balance (unsigned): "Â£508.88"
-_BALANCE_RE    = re.compile(r'^Â£[\d,]+\.\d{2}$')
+_SIGNED_AMT_RE = re.compile(r'^[+\-\u2212]?£[\d,]+\.\d{2}$')
+_BALANCE_RE    = re.compile(r'^£[\d,]+\.\d{2}$')
 
 _TRANSACTION_TYPES = {
     'purchase', 'direct debit', 'transfer', 'payment',
@@ -21,12 +25,12 @@ _TRANSACTION_TYPES = {
 _JUNK_EXACT = {
     'date', 'transaction details', 'amount', 'balance',
     'opening balance', 'closing balance', 'money in', 'money out',
-    '+', 'âˆ’', '\u2212', '=',
+    '+', '-', '=',
 }
 _JUNK_PATTERNS = [
     re.compile(r'^page \d+ of \d+', re.I),
     re.compile(r'account statement', re.I),
-    re.compile(r'^\d{1,2}\s+[a-z]+\s+\d{4}\s*[-â€“]\s*\d{1,2}\s+[a-z]+\s+\d{4}$', re.I),
+    re.compile(r'^\d{1,2}\s+[a-z]+\s+\d{4}\s*[-]\s*\d{1,2}\s+[a-z]+\s+\d{4}$', re.I),
     re.compile(r'^account number', re.I),
     re.compile(r'^sort code', re.I),
     re.compile(r'^some useful', re.I),
@@ -52,16 +56,13 @@ def _is_junk(line: str) -> bool:
 
 
 def _parse_signed_amount(s: str) -> float:
-    """Handle normal minus, Unicode minus (âˆ’), and plus prefix."""
-    s = s.replace('\u2212', '-').replace('Â£', '').replace(',', '')
+    # Handle Unicode minus as well as regular minus
+    s = s.replace('\u2212', '-').replace('£', '').replace(',', '')
     return float(s)
 
 
-def _try_table_parse(pdf) -> list[dict]:
-    """
-    Fallback: use pdfplumber table extraction.
-    Chase tables have columns: Date | Transaction details | Amount | Balance
-    """
+def _try_table_parse(pdf) -> list:
+    """Fallback: use pdfplumber table extraction if text parse fails."""
     transactions = []
     for page in pdf.pages:
         tables = page.extract_tables()
@@ -72,14 +73,14 @@ def _try_table_parse(pdf) -> list[dict]:
                 date_cell = (row[0] or '').strip()
                 desc_cell = (row[1] or '').strip()
                 amt_cell  = (row[2] or '').strip()
-                # Skip header rows and empty rows
                 if not date_cell or not desc_cell or not amt_cell:
                     continue
-                if date_cell.lower() in ('date',) or desc_cell.lower() in ('transaction details',):
+                if date_cell.lower() in ('date',):
+                    continue
+                if desc_cell.lower() in ('transaction details',):
                     continue
                 if date_cell.lower() in ('opening balance', 'closing balance'):
                     continue
-                # Try to parse date
                 try:
                     date = pd.to_datetime(date_cell, format='%d %b %Y', errors='raise')
                 except Exception:
@@ -87,8 +88,7 @@ def _try_table_parse(pdf) -> list[dict]:
                         date = pd.to_datetime(date_cell, dayfirst=True, errors='raise')
                     except Exception:
                         continue
-                # Parse amount (may have Â£ and âˆ’ or -)
-                amt_str = amt_cell.replace('\u2212', '-').replace('Â£', '').replace(',', '').strip()
+                amt_str = amt_cell.replace('\u2212', '-').replace('£', '').replace(',', '').strip()
                 try:
                     amount = float(amt_str)
                 except ValueError:
@@ -97,11 +97,11 @@ def _try_table_parse(pdf) -> list[dict]:
     return transactions
 
 
-def _try_text_parse(all_lines: list[str]) -> list[dict]:
+def _try_text_parse(all_lines: list) -> list:
     """State-machine parser for Chase UK multi-line text format."""
     transactions = []
     cur_date = None
-    cur_desc_parts: list[str] = []
+    cur_desc_parts = []
     cur_amount = None
 
     def flush():
@@ -109,7 +109,11 @@ def _try_text_parse(all_lines: list[str]) -> list[dict]:
         if cur_date and cur_desc_parts and cur_amount is not None:
             desc = ' '.join(cur_desc_parts).strip()
             if desc.lower() not in ('opening balance', 'closing balance'):
-                transactions.append({'Date': cur_date, 'Description': desc, 'Amount': cur_amount})
+                transactions.append({
+                    'Date': cur_date,
+                    'Description': desc,
+                    'Amount': cur_amount,
+                })
         cur_date = None
         cur_desc_parts = []
         cur_amount = None
@@ -145,15 +149,15 @@ def _try_text_parse(all_lines: list[str]) -> list[dict]:
 class ChaseStatementParser:
     def __init__(self, user_id: str = 'default'):
         self.user_id = user_id
-        self._learned_rules: dict[str, str] = (
+        self._learned_rules = (
             load_learned_rules(user_id) if user_id and user_id != 'default' else {}
         )
 
-    def apply_vendor_cache(self, vendor_cache: dict[str, str]) -> None:
+    def apply_vendor_cache(self, vendor_cache: dict) -> None:
         self._learned_rules.update(vendor_cache)
 
     def parse(self, file) -> pd.DataFrame:
-        all_lines: list[str] = []
+        all_lines = []
         try:
             with pdfplumber.open(file) as pdf:
                 for i, page in enumerate(pdf.pages):
@@ -162,36 +166,37 @@ class ChaseStatementParser:
                         page_lines = text.split('\n')
                         all_lines.extend(page_lines)
                         if i == 0:
-                            logger.info(f'[CHASE] Page 1 raw lines (first 20):')
+                            logger.info('[CHASE] Page 1 raw lines (first 20):')
                             for ln in page_lines[:20]:
-                                logger.info(f'  {repr(ln)}')
+                                logger.info('  %s', repr(ln))
 
                 transactions = _try_text_parse(all_lines)
-                logger.info(f'[CHASE] Text parse found {len(transactions)} transactions')
+                logger.info('[CHASE] Text parse found %d transactions', len(transactions))
 
                 if not transactions:
-                    logger.info('[CHASE] Text parse empty â€” trying table extraction')
+                    logger.info('[CHASE] Text parse empty - trying table extraction')
                     file.seek(0)
                     with pdfplumber.open(file) as pdf2:
                         transactions = _try_table_parse(pdf2)
-                    logger.info(f'[CHASE] Table parse found {len(transactions)} transactions')
+                    logger.info('[CHASE] Table parse found %d transactions', len(transactions))
 
         except Exception as e:
-            logger.error(f'[CHASE] PDF open/parse error: {e!r}')
-            import traceback; traceback.print_exc()
+            logger.error('[CHASE] PDF parse error: %r', e)
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
 
         if not transactions:
             logger.warning('[CHASE] Both parse strategies returned 0 transactions')
-            logger.info(f'[CHASE] Total raw lines extracted: {len(all_lines)}')
-            logger.info(f'[CHASE] Sample (lines 0-30): {all_lines[:30]}')
+            logger.info('[CHASE] Total raw lines: %d', len(all_lines))
+            logger.info('[CHASE] Sample lines 0-30: %s', all_lines[:30])
             return pd.DataFrame()
 
         df = pd.DataFrame(transactions)
         df['Category'] = df['Description'].apply(self.get_category)
         df['Balance']  = 0.0
         df['Type']     = df['Amount'].apply(lambda x: 'Expense' if x < 0 else 'Income')
-        logger.info(f'[CHASE] Final DataFrame: {len(df)} rows, categories: {df["Category"].value_counts().to_dict()}')
+        logger.info('[CHASE] Done: %d rows', len(df))
         return df[['Date', 'Description', 'Amount', 'Type', 'Category', 'Balance']]
 
     def get_category(self, desc: str) -> str:
@@ -205,14 +210,15 @@ class ChaseStatementParser:
                     return cat
         return 'Uncategorized'
 
+
 class AmexCSVParser:
     def __init__(self, user_id: str = 'default'):
         self.user_id = user_id
-        self._learned_rules: dict[str, str] = (
+        self._learned_rules = (
             load_learned_rules(user_id) if user_id and user_id != 'default' else {}
         )
 
-    def apply_vendor_cache(self, vendor_cache: dict[str, str]) -> None:
+    def apply_vendor_cache(self, vendor_cache: dict) -> None:
         self._learned_rules.update(vendor_cache)
 
     def parse(self, file) -> pd.DataFrame:
@@ -228,5 +234,5 @@ class AmexCSVParser:
             df['Category']    = df['Description'].apply(helper.get_category)
             return df[['Date', 'Description', 'Amount', 'Type', 'Category', 'Balance']]
         except Exception as e:
-            logger.error(f'[AMEX] Parse error: {e!r}')
+            logger.error('[AMEX] Parse error: %r', e)
             return pd.DataFrame()
