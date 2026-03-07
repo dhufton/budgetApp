@@ -1023,3 +1023,239 @@ tr.uncategorized-row:hover {
         padding: 0.375rem 0.75rem;
     }
 }
+
+/* =====================================================
+   Accordion - Categories Settings
+   ===================================================== */
+
+.btn-add-pill {
+    padding: 0.35rem 0.875rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+
+.btn-add-pill:hover { opacity: 0.88; }
+
+.accordion-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    overflow: hidden;
+}
+
+.accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #f9fafb;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+}
+
+.accordion-header:hover { background: #f3f4f6; }
+
+.accordion-header__left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.accordion-header__right {
+    display: flex;
+    align-items: center;
+}
+
+.accordion-chevron {
+    font-size: 0.65rem;
+    color: #9ca3af;
+    width: 14px;
+    display: inline-block;
+}
+
+.accordion-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1f2937;
+}
+
+.accordion-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    background: #ede9fe;
+    color: #7c3aed;
+    padding: 0.1rem 0.4rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.accordion-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    color: #d1d5db;
+    padding: 0.25rem;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.accordion-delete:hover { color: #ef4444; }
+
+.accordion-body {
+    padding: 0.875rem 1rem;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* Keyword chips */
+.kw-chips-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+}
+
+.kw-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.kw-chip--builtin {
+    background: #f3f4f6;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+}
+
+.kw-chip--custom {
+    background: #eef2ff;
+    color: #4f46e5;
+    border: 1px solid #c7d2fe;
+}
+
+.kw-chip__remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #818cf8;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    transition: color 0.15s;
+}
+
+.kw-chip__remove:hover { color: #ef4444; }
+
+.kw-input-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.kw-input {
+    flex: 1;
+    padding: 0.45rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.85rem;
+    transition: border-color 0.2s;
+}
+
+.kw-input:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.kw-add-btn {
+    padding: 0.45rem 0.875rem;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 0.375rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+}
+
+.kw-add-btn:hover { background: #4f46e5; }
+
+.kw-empty {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin-bottom: 0.75rem;
+}
+
+.btn--success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+}
+
+/* Add Category Modal */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-box {
+    background: white;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-box h3 {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 1rem;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+}
+
+.modal-btn-confirm {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.modal-btn-cancel {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb !important;
+}

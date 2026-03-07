@@ -1,3 +1,4 @@
+# api/main.py
 import sys
 import os
 import logging
@@ -9,10 +10,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from api.routes import transactions, upload, categories, budget
 from api.dependencies import get_supabase, get_groq_service
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from api.auth import get_current_user
 from supabase import Client
 from api.groq_service import GroqService
+from api.routes.categories import apply_user_keywords
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -56,7 +58,7 @@ async def startup():
         get_groq_service()
         logger.info("Groq service ready")
     except RuntimeError as e:
-        logger.warning(f"Groq service unavailable â€“ categorisation disabled: {e}")
+        logger.warning(f"Groq service unavailable - categorisation disabled: {e}")
 
 
 @app.get("/api/config")
@@ -68,23 +70,19 @@ async def get_config():
     }
 
 
-@app.api_route("/",            methods=["GET", "HEAD"])
-async def root():            return FileResponse("frontend/index.html")
+@app.api_route("/",             methods=["GET", "HEAD"])
+async def root():             return FileResponse("frontend/index.html")
 
-@app.api_route("/dashboard",   methods=["GET", "HEAD"])
-async def dashboard():       return FileResponse("frontend/dashboard.html")
+@app.api_route("/dashboard",    methods=["GET", "HEAD"])
+async def dashboard():        return FileResponse("frontend/dashboard.html")
 
-@app.api_route("/settings",    methods=["GET", "HEAD"])
-async def settings_page():   return FileResponse("frontend/settings.html")
+@app.api_route("/settings",     methods=["GET", "HEAD"])
+async def settings_page():    return FileResponse("frontend/settings.html")
 
 @app.api_route("/transactions", methods=["GET", "HEAD"])
 async def transactions_page(): return FileResponse("frontend/transactions.html")
 
 
-# ---------------------------------------------------------------------------
-# /api/insights
-# BUG FIX: current_user is a str (user_id), not an object â€” remove .id
-# ---------------------------------------------------------------------------
 @app.get("/api/insights")
 async def get_insights(
     current_user: str = Depends(get_current_user),
@@ -95,17 +93,17 @@ async def get_insights(
         result = (
             supabase.table("transactions")
             .select("amount, category, date")
-            .eq("user_id", current_user)          # FIX: was current_user.id
+            .eq("user_id", current_user)
             .execute()
         )
-        transactions = result.data or []
+        txns = result.data or []
         now = datetime.now()
         current_month = now.strftime("%Y-%m")
         prev_month = (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
         def monthly_totals(month: str) -> dict:
-            totals: dict[str, float] = defaultdict(float)
-            for t in transactions:
+            totals: dict = defaultdict(float)
+            for t in txns:
                 if t["date"].startswith(month) and t["amount"] < 0:
                     totals[t["category"]] += abs(t["amount"])
             return {k: round(v, 2) for k, v in totals.items()}
@@ -117,14 +115,9 @@ async def get_insights(
     except Exception as e:
         logger.error(f"Insights error: {e!r}")
         import traceback; traceback.print_exc()
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ---------------------------------------------------------------------------
-# /api/budget-suggestions
-# BUG FIX: same current_user.id issue
-# ---------------------------------------------------------------------------
 @app.get("/api/budget-suggestions")
 async def get_budget_suggestions(
     current_user: str = Depends(get_current_user),
@@ -134,7 +127,7 @@ async def get_budget_suggestions(
     result = (
         supabase.table("transactions")
         .select("amount, category, date")
-        .eq("user_id", current_user)              # FIX: was current_user.id
+        .eq("user_id", current_user)
         .execute()
     )
     monthly_category: dict = defaultdict(lambda: defaultdict(float))
@@ -156,10 +149,6 @@ async def get_budget_suggestions(
     return {"suggestions": suggestions, "based_on_months": len(monthly_category)}
 
 
-# ---------------------------------------------------------------------------
-# /api/categorise
-# BUG FIX: same current_user.id issue
-# ---------------------------------------------------------------------------
 @app.post("/api/categorise")
 async def categorise_transactions(
     current_user: str = Depends(get_current_user),
@@ -169,15 +158,38 @@ async def categorise_transactions(
     result = (
         supabase.table("transactions")
         .select("id, description, category")
-        .eq("user_id", current_user)              # FIX: was current_user.id
+        .eq("user_id", current_user)
         .eq("category", "Uncategorized")
         .execute()
     )
     uncategorised = result.data or []
     if not uncategorised:
         return {"message": "No uncategorised transactions", "changed": 0}
-    _, changed = groq.apply_categories_to_transactions(uncategorised, current_user)  # FIX
-    return {"message": f"Categorised {changed} transactions", "changed": changed}
+
+    # Apply user-defined keywords first before hitting Groq
+    uncategorised = apply_user_keywords(uncategorised, current_user)
+
+    # Persist any that were resolved by user keywords
+    kw_changed = 0
+    still_uncategorised = []
+    for txn in uncategorised:
+        if txn.get("category") != "Uncategorized":
+            kw_changed += 1
+            try:
+                supabase.table("transactions").update(
+                    {"category": txn["category"]}
+                ).eq("id", txn["id"]).eq("user_id", current_user).execute()
+            except Exception as e:
+                logger.warning(f"Failed to persist user-keyword category: {e!r}")
+        else:
+            still_uncategorised.append(txn)
+
+    groq_changed = 0
+    if still_uncategorised:
+        _, groq_changed = groq.apply_categories_to_transactions(still_uncategorised, current_user)
+
+    total_changed = kw_changed + groq_changed
+    return {"message": f"Categorised {total_changed} transactions", "changed": total_changed}
 
 
 @app.get("/health")
