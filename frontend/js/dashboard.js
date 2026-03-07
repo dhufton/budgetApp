@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function bindEvent(id, event, handler) {
     const el = document.getElementById(id);
     if (el) el.addEventListener(event, handler);
-    else console.warn(`bindEvent: element #${id} not found â€” listener not attached`);
+    else console.warn(`bindEvent: element #${id} not found - listener not attached`);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,14 +192,14 @@ async function fixUncategorised() {
             btn.classList.add('hidden');
             setTimeout(async () => { showLoading(true); await loadDashboard(); showLoading(false); }, 1500);
         } else {
-            countEl.textContent = 'No new categories found â€” try manually categorising remaining transactions';
+            countEl.textContent = 'No new categories found - try manually categorising remaining transactions';
             btn.disabled = false;
             btn.textContent = 'Fix with AI';
             btn.classList.remove('opacity-75', 'cursor-not-allowed');
         }
     } catch (error) {
         console.error('Categorisation failed:', error);
-        countEl.textContent = 'Categorisation failed â€” please try again';
+        countEl.textContent = 'Categorisation failed - please try again';
         btn.disabled = false;
         btn.textContent = 'Fix with AI';
         btn.classList.remove('opacity-75', 'cursor-not-allowed');
@@ -240,7 +240,7 @@ function showLoading(loading) {
 
 function showEmptyState() {
     const tbody = document.getElementById('transactionsTable');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">No transactions yet â€” upload a bank statement to get started!</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;padding:2rem;color:#6b7280">No transactions yet - upload a bank statement to get started!</td></tr>`;
     const pieChart = document.getElementById('pieChart');
     if (pieChart) pieChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Upload a statement to see spending breakdown</p>`;
     const lineChart = document.getElementById('lineChart');
