@@ -158,7 +158,7 @@ async def delete_budget_target(
 
 
 @router.get("/budget-comparison")
-async def get_budget_comparison(user_id: str = Depends(get_current_user)):
+async def get_budget_comparison(account_id: str = "all", user_id: str = Depends(get_current_user)):
     """Compare actual spending vs budget targets"""
     try:
         # Get budget targets
@@ -177,19 +177,22 @@ async def get_budget_comparison(user_id: str = Depends(get_current_user)):
         month_start = _month_start()
         next_month_start = _add_months(month_start, 1)
 
-        transactions_result = supabase_admin.table("transactions") \
+        tx_query = supabase_admin.table("transactions") \
             .select("category, amount") \
             .eq("user_id", user_id) \
-            .gte("date", month_start.isoformat()) \
-            .lt("date", next_month_start.isoformat()) \
-            .lt("amount", 0) \
-            .execute()
+            .gte("date", f"{current_month}-01") \
+            .lt("amount", 0)
+        if account_id != "all":
+            tx_query = tx_query.eq("account_id", account_id)
+        transactions_result = tx_query.execute()
 
         # Calculate spending by category
         spending = {}
         for t in (transactions_result.data or []):
             cat = t["category"]
-            spending[cat] = spending.get(cat, 0.0) + abs(float(t["amount"]))
+            if cat == "Transfer":
+                continue
+            spending[cat] = spending.get(cat, 0) + abs(float(t["amount"]))
 
         # Build comparison
         comparison = []

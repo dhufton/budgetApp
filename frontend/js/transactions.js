@@ -2,7 +2,9 @@
 
 let allTransactions = [];
 let allCategories = [];
+let allAccounts = [];
 let currentFilter = 'all';
+let currentAccountId = 'all';
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
@@ -13,10 +15,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const email = localStorage.getItem('user_email');
     document.getElementById('userEmail').textContent = email || 'User';
+    const accountFilterEl = document.getElementById('accountFilter');
+    if (accountFilterEl) {
+        accountFilterEl.addEventListener('change', async (e) => {
+            currentAccountId = e.target.value;
+            await loadTransactions();
+        });
+    }
 
+    await loadAccounts();
     await loadCategories();
     await loadTransactions();
 });
+
+async function loadAccounts() {
+    try {
+        const data = await api.getAccounts();
+        allAccounts = data?.accounts || [];
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+        allAccounts = [];
+    }
+    const select = document.getElementById('accountFilter');
+    if (select) {
+        select.innerHTML = '<option value="all">All Accounts</option>' +
+            allAccounts.map(a => `<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+        select.value = currentAccountId;
+    }
+}
 
 async function loadCategories() {
     try {
@@ -32,7 +58,7 @@ async function loadCategories() {
 
 async function loadTransactions() {
     try {
-        const data = await api.getTransactions();
+        const data = await api.getTransactions(currentAccountId);
         console.log('Raw API response:', data);
 
         // Make sure we're accessing the transactions array correctly

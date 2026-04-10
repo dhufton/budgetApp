@@ -39,9 +39,15 @@ async function authFetch(url, options = {}) {
 // ---------------------------------------------------------------------------
 const api = {
 
-    async getTransactions() {
+    _withAccountParam(url, accountId) {
+        if (!accountId || accountId === 'all') return url;
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}account_id=${encodeURIComponent(accountId)}`;
+    },
+
+    async getTransactions(accountId = 'all') {
         try {
-            const response = await authFetch(ENDPOINTS.transactions);
+            const response = await authFetch(this._withAccountParam(ENDPOINTS.transactions, accountId));
             if (!response) return null;
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -54,8 +60,12 @@ const api = {
         }
     },
 
-    async uploadFile(formData) {
+    async uploadFile(formData, accountId) {
         try {
+            if (!accountId || accountId === 'all') {
+                throw new Error('Account is required');
+            }
+            formData.append('account_id', accountId);
             const response = await authFetch(ENDPOINTS.upload, {
                 method: 'POST',
                 body: formData,
@@ -213,9 +223,9 @@ const api = {
         }
     },
 
-    async getBudgetComparison() {
+    async getBudgetComparison(accountId = 'all') {
         try {
-            const response = await authFetch(ENDPOINTS.budgetComparison);
+            const response = await authFetch(this._withAccountParam(ENDPOINTS.budgetComparison, accountId));
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -268,9 +278,9 @@ const api = {
         }
     },
 
-    async categoriseTransactions() {
+    async categoriseTransactions(accountId = 'all') {
         try {
-            const response = await authFetch(ENDPOINTS.categorise, { method: 'POST' });
+            const response = await authFetch(this._withAccountParam(ENDPOINTS.categorise, accountId), { method: 'POST' });
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -280,9 +290,9 @@ const api = {
         }
     },
 
-    async getInsights() {
+    async getInsights(accountId = 'all') {
         try {
-            const response = await authFetch(ENDPOINTS.insights);
+            const response = await authFetch(this._withAccountParam(ENDPOINTS.insights, accountId));
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -292,9 +302,9 @@ const api = {
         }
     },
 
-    async getBudgetSuggestions() {
+    async getBudgetSuggestions(accountId = 'all') {
         try {
-            const response = await authFetch(ENDPOINTS.budgetSuggestions);
+            const response = await authFetch(this._withAccountParam(ENDPOINTS.budgetSuggestions, accountId));
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -302,5 +312,53 @@ const api = {
             console.error('Failed to fetch budget suggestions:', error);
             throw error;
         }
+    },
+
+    async getAccounts() {
+        const response = await authFetch(ENDPOINTS.accounts);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch accounts');
+        }
+        return response.json();
+    },
+
+    async createAccount(name, accountType) {
+        const response = await authFetch(ENDPOINTS.accounts, {
+            method: 'POST',
+            body: JSON.stringify({ name, account_type: accountType }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to create account');
+        }
+        return response.json();
+    },
+
+    async updateAccount(accountId, payload) {
+        const response = await authFetch(ENDPOINTS.account(accountId), {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to update account');
+        }
+        return response.json();
+    },
+
+    async deleteAccount(accountId) {
+        const response = await authFetch(ENDPOINTS.account(accountId), {
+            method: 'DELETE',
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to delete account');
+        }
+        return response.json();
     },
 };

@@ -31,6 +31,18 @@
         <!-- Categories Section -->
         <div id="categoriesSection" class="settings-section">
             <div class="upload-section">
+                <h2 style="margin-bottom:0.75rem;">Accounts</h2>
+                <div style="display:grid; grid-template-columns: 1fr 180px auto; gap:0.5rem; margin-bottom:0.75rem;">
+                    <input id="accountName" type="text" placeholder="Account name (e.g. Main Current)" />
+                    <select id="accountType" class="form-select">
+                        <option value="current">Current</option>
+                        <option value="credit">Credit</option>
+                        <option value="savings">Savings</option>
+                        <option value="other">Other</option>
+                    </select>
+                    <button onclick="createAccount()" class="btn" style="width:auto; padding:0.6rem 1rem;">Add Account</button>
+                </div>
+                <div id="accountsList" class="budgets-list" style="margin-bottom:1.5rem;"></div>
 
                 <!-- Card header -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">

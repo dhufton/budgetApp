@@ -5,11 +5,13 @@
 // ---------------------------------------------------------------------------
 let allTransactions = [];
 let allCategories = [];
+let allAccounts = [];
 let filteredTransactions = [];
 let currentSort = { column: 'date', direction: 'desc' };
 let currentPage = 1;
 let pageSize = 50;
 let isLoading = false;
+let currentAccountId = 'all';
 
 // ---------------------------------------------------------------------------
 // Initialise
@@ -26,6 +28,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         bindEvent('dismissInsightsBtn','click',  () => document.getElementById('insightsCard')?.classList.add('hidden'));
         bindEvent('searchInput',       'input',  () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('categoryFilter',    'change', () => { currentPage = 1; filterAndRenderTable(); });
+        bindEvent('accountFilter',     'change', async (e) => {
+            currentAccountId = e.target.value;
+            showLoading(true);
+            await loadDashboard();
+            showLoading(false);
+        });
+        bindEvent('uploadAccount',     'change', (e) => {
+            const btn = document.getElementById('uploadBtn');
+            if (btn) btn.disabled = !e.target.value;
+        });
         bindEvent('thDate',            'click',  () => sortTable('date'));
         bindEvent('thCategory',        'click',  () => sortTable('category'));
         bindEvent('thAmount',          'click',  () => sortTable('amount'));
@@ -43,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         showLoading(true);
+        await loadAccounts();
         await loadCategories();
         await loadDashboard();
         showLoading(false);
@@ -69,6 +82,8 @@ async function uploadFiles() {
     if (!input || input.files.length === 0) { alert('Please select a file to upload'); return; }
 
     const status = document.getElementById('uploadStatus');
+    const uploadAccount = document.getElementById('uploadAccount')?.value;
+    if (!uploadAccount) { alert('Please select an account first'); return; }
     const files = input.files;
     status.textContent = 'Uploading...';
     status.style.color = '#3b82f6';
@@ -79,7 +94,7 @@ async function uploadFiles() {
         const formData = new FormData();
         formData.append('file', file);
         try {
-            const result = await api.uploadFile(formData);
+            const result = await api.uploadFile(formData, uploadAccount);
             if (result?.success) successCount++;
         } catch (error) {
             console.error('Upload error:', error);
@@ -107,6 +122,41 @@ async function uploadFiles() {
     }
 }
 
+async function loadAccounts() {
+    try {
+        const data = await api.getAccounts();
+        allAccounts = data?.accounts || [];
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+        allAccounts = [];
+    }
+    populateAccountSelectors();
+}
+
+function populateAccountSelectors() {
+    const accountFilter = document.getElementById('accountFilter');
+    const uploadAccount = document.getElementById('uploadAccount');
+
+    if (accountFilter) {
+        accountFilter.innerHTML = '<option value="all">All Accounts</option>' +
+            allAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        accountFilter.value = currentAccountId;
+    }
+
+    if (uploadAccount) {
+        uploadAccount.innerHTML = '<option value="">Select account</option>' +
+            allAccounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+        const btn = document.getElementById('uploadBtn');
+        if (allAccounts.length > 0) {
+            const defaultAcc = allAccounts.find(a => a.is_default) || allAccounts[0];
+            uploadAccount.value = defaultAcc.id;
+            if (btn) btn.disabled = false;
+        } else if (btn) {
+            btn.disabled = true;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Load categories
 // ---------------------------------------------------------------------------
@@ -124,7 +174,7 @@ async function loadCategories() {
 // ---------------------------------------------------------------------------
 async function loadDashboard() {
     try {
-        const data = await api.getTransactions();
+        const data = await api.getTransactions(currentAccountId);
         if (!data?.transactions) { showEmptyState(); return; }
 
         allTransactions = data.transactions;
@@ -173,7 +223,7 @@ async function loadInsights() {
     const text = document.getElementById('insightsText');
     if (!card || !text) return;
     try {
-        const data = await api.getInsights();
+        const data = await api.getInsights(currentAccountId);
         if (data?.insight) { text.textContent = data.insight; card.classList.remove('hidden'); }
     } catch (error) {
         console.warn('Could not load insights:', error);
@@ -190,7 +240,7 @@ async function fixUncategorised() {
     btn.textContent = 'Categorising...';
     btn.classList.add('opacity-75', 'cursor-not-allowed');
     try {
-        const result = await api.categoriseTransactions();
+        const result = await api.categoriseTransactions(currentAccountId);
         if (result?.changed > 0) {
             countEl.textContent = `${result.changed} transaction${result.changed !== 1 ? 's' : ''} categorised!`;
             btn.classList.add('hidden');
@@ -214,7 +264,9 @@ async function fixUncategorised() {
 // Metrics
 // ---------------------------------------------------------------------------
 function calculateMetrics() {
-    const spending = allTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const spending = allTransactions
+        .filter(t => t.amount < 0 && t.category !== 'Transfer')
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
     const income   = allTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
     const net = income - spending;
     const totalSpentEl = document.getElementById('totalSpent');
@@ -280,7 +332,7 @@ function renderPieChart() {
         return;
     }
     const categoryTotals = {};
-    allTransactions.filter(t => t.amount < 0).forEach(t => {
+    allTransactions.filter(t => t.amount < 0 && t.category !== 'Transfer').forEach(t => {
         const cat = t.category || 'Uncategorized';
         categoryTotals[cat] = (categoryTotals[cat] || 0) + Math.abs(t.amount);
     });
@@ -304,7 +356,7 @@ function renderLineChart() {
         return;
     }
     const monthlyData = {};
-    allTransactions.filter(t => t.amount < 0).forEach(t => {
+    allTransactions.filter(t => t.amount < 0 && t.category !== 'Transfer').forEach(t => {
         const month = t.date.substring(0, 7);
         monthlyData[month] = (monthlyData[month] || 0) + Math.abs(t.amount);
     });
@@ -334,7 +386,7 @@ function renderCategorySpendingChart() {
         return;
     }
     const monthlyData = {};
-    const spendingTxns = allTransactions.filter(t => t.amount < 0);
+    const spendingTxns = allTransactions.filter(t => t.amount < 0 && t.category !== 'Transfer');
     spendingTxns.forEach(t => {
         const month = t.date.substring(0, 7);
         const cat = t.category || 'Uncategorized';

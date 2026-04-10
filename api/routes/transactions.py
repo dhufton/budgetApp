@@ -17,14 +17,16 @@ class UpdateCategoryRequest(BaseModel):
 
 
 @router.get("/transactions")
-async def get_transactions(user_id: str = Depends(get_current_user)):
+async def get_transactions(account_id: str = "all", user_id: str = Depends(get_current_user)):
     """Get all transactions for the authenticated user"""
     try:
-        result = supabase_admin.table("transactions") \
+        query = supabase_admin.table("transactions") \
             .select("*") \
             .eq("user_id", user_id) \
-            .order("date", desc=True) \
-            .execute()
+            .order("date", desc=True)
+        if account_id != "all":
+            query = query.eq("account_id", account_id)
+        result = query.execute()
 
         return {"transactions": result.data or []}
     except Exception as e:

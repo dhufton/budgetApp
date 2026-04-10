@@ -1,7 +1,7 @@
 // frontend/js/constants.js
 
 const DEFAULT_CATEGORIES = [
-    'Bills', 'Entertainment', 'Food', 'Savings', 'Shopping', 'Transport', 'Uncategorized'
+    'Bills', 'Entertainment', 'Food', 'Savings', 'Shopping', 'Transport', 'Transfer', 'Uncategorized'
 ];
 
 const CHART_COLOURS = [
@@ -19,6 +19,8 @@ const ENDPOINTS = {
     budgetTargets:     '/api/budget-targets',
     budgetTarget:      (name)   => `/api/budget-targets/${encodeURIComponent(name)}`,
     budgetComparison:  '/api/budget-comparison',
+    accounts:          '/api/accounts',
+    account:           (id)     => `/api/accounts/${encodeURIComponent(id)}`,
     budgetHealth:      '/api/budget-health',
     budgetTrend:       '/api/budget-trend',
     config:            '/api/config',

@@ -14,6 +14,7 @@ If any table/column is renamed, API routes and frontend payloads must be updated
 ### `statements`
 - `id` `uuid` primary key
 - `user_id` `uuid` not null references `users(id)`
+- `account_id` `uuid` nullable references `accounts(id)`
 - `storage_key` `text` not null unique
 - `filename` `text` not null
 - `uploaded_at` `timestamptz` default `now()`
@@ -22,11 +23,21 @@ If any table/column is renamed, API routes and frontend payloads must be updated
 - `id` `uuid` primary key
 - `user_id` `uuid` not null references `users(id)`
 - `statement_id` `uuid` nullable references `statements(id)`
+- `account_id` `uuid` nullable references `accounts(id)`
 - `date` `date` not null
 - `description` `text` not null
 - `amount` `numeric(12,2)` not null
 - `category` `text` not null default `'Uncategorized'`
 - `created_at` `timestamptz` default `now()`
+
+### `accounts`
+- `id` `uuid` primary key
+- `user_id` `uuid` not null references `users(id)`
+- `name` `text` not null
+- `account_type` `text` enum-like: `current|credit|savings|other`
+- `is_default` `boolean` not null default `false`
+- `created_at` `timestamptz` default `now()`
+- Unique key: `(user_id, name)`
 
 ### `categories`
 - `id` `uuid` primary key
@@ -68,6 +79,7 @@ The backend treats these as built-in categories:
 - `Savings`
 - `Shopping`
 - `Transport`
+- `Transfer`
 - `Uncategorized`
 
 ## Environment Contract

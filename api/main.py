@@ -10,13 +10,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from api.routes import transactions, upload, categories, budget
+from api.routes import transactions, upload, categories, budget, accounts
 from api.dependencies import get_supabase, get_groq_service
 from fastapi import FastAPI, Depends, HTTPException, Request
 from api.auth import get_current_user
 from supabase import Client
 from api.groq_service import GroqService
 from api.routes.categories import apply_user_keywords
+from api.transfer_rules import apply_transfer_classification
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -51,6 +52,13 @@ app.include_router(upload.router,       prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
 app.include_router(categories.router,   prefix="/api", tags=["categories"])
 app.include_router(budget.router,       prefix="/api", tags=["budget"])
+app.include_router(accounts.router,     prefix="/api", tags=["accounts"])
+
+
+def _apply_account_filter(query, account_id: str):
+    if account_id and account_id != "all":
+        return query.eq("account_id", account_id)
+    return query
 
 
 @app.middleware("http")
@@ -142,14 +150,16 @@ async def get_insights(
     current_user: str = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
     groq: GroqService = Depends(get_groq_service),
+    account_id: str = "all",
 ):
     try:
-        result = (
+        query = (
             supabase.table("transactions")
             .select("amount, category, date")
             .eq("user_id", current_user)
-            .execute()
         )
+        query = _apply_account_filter(query, account_id)
+        result = query.execute()
         txns = result.data or []
         now = datetime.now()
         current_month = now.strftime("%Y-%m")
@@ -158,7 +168,11 @@ async def get_insights(
         def monthly_totals(month: str) -> dict:
             totals: dict = defaultdict(float)
             for t in txns:
-                if t["date"].startswith(month) and t["amount"] < 0:
+                if (
+                    t["date"].startswith(month)
+                    and t["amount"] < 0
+                    and t.get("category") != "Transfer"
+                ):
                     totals[t["category"]] += abs(t["amount"])
             return {k: round(v, 2) for k, v in totals.items()}
 
@@ -177,16 +191,18 @@ async def get_budget_suggestions(
     current_user: str = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
     groq: GroqService = Depends(get_groq_service),
+    account_id: str = "all",
 ):
-    result = (
+    query = (
         supabase.table("transactions")
         .select("amount, category, date")
         .eq("user_id", current_user)
-        .execute()
     )
+    query = _apply_account_filter(query, account_id)
+    result = query.execute()
     monthly_category: dict = defaultdict(lambda: defaultdict(float))
     for t in result.data or []:
-        if t["amount"] < 0:
+        if t["amount"] < 0 and t.get("category") != "Transfer":
             month = t["date"][:7]
             monthly_category[month][t["category"]] += abs(t["amount"])
     if not monthly_category:
@@ -208,20 +224,23 @@ async def categorise_transactions(
     current_user: str = Depends(get_current_user),
     supabase: Client = Depends(get_supabase),
     groq: GroqService = Depends(get_groq_service),
+    account_id: str = "all",
 ):
-    result = (
+    query = (
         supabase.table("transactions")
         .select("id, description, category")
         .eq("user_id", current_user)
         .eq("category", "Uncategorized")
-        .execute()
     )
+    query = _apply_account_filter(query, account_id)
+    result = query.execute()
     uncategorised = result.data or []
     if not uncategorised:
         return {"message": "No uncategorised transactions", "changed": 0}
 
     # Apply user-defined keywords first before hitting Groq
     uncategorised = apply_user_keywords(uncategorised, current_user)
+    uncategorised = apply_transfer_classification(uncategorised)
 
     # Persist any that were resolved by user keywords
     kw_changed = 0
