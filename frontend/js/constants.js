@@ -37,4 +37,8 @@ const ENDPOINTS = {
     categoriseOverride: '/api/categorise/override',
     categoriseReject: '/api/categorise/reject',
     categoriseAcceptHighConfidence: '/api/categorise/accept-high-confidence',
+    recurringRecompute: '/api/recurring/recompute',
+    recurring: '/api/recurring',
+    recurringRule: (id) => `/api/recurring/${encodeURIComponent(id)}`,
+    recurringUpcoming: '/api/recurring/upcoming',
 };

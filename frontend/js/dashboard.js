@@ -212,6 +212,7 @@ async function loadDashboard() {
             await loadBudgetHealth();
             await loadBudgetTrend();
             await loadReviews();
+            await loadRecurringUpcoming();
             await loadAiReviewQueue();
         } else {
             populateCategoryFilter();
@@ -222,6 +223,7 @@ async function loadDashboard() {
             await loadBudgetHealth();
             await loadBudgetTrend();
             await loadReviews();
+            await loadRecurringUpcoming();
             await loadAiReviewQueue();
             sortTable('date');
         }
@@ -604,6 +606,10 @@ function showLoading(loading) {
     if (budgetHealthSummary) budgetHealthSummary.textContent = 'Loading...';
     const reviewStatus = document.getElementById('reviewStatus');
     if (reviewStatus) reviewStatus.textContent = 'Loading review...';
+    const recurringRows = document.getElementById('recurringUpcomingRows');
+    if (recurringRows) recurringRows.innerHTML = `<tr><td colspan="5" style="padding:0.7rem; color:#6b7280;">Loading recurring charges...</td></tr>`;
+    const recurringSummary = document.getElementById('recurringSummary');
+    if (recurringSummary) recurringSummary.textContent = 'Loading...';
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
@@ -625,6 +631,10 @@ function showEmptyState() {
     if (reviewStatus) reviewStatus.textContent = 'No review yet';
     renderReviewSummary(null);
     renderReviewHistory([]);
+    const recurringRows = document.getElementById('recurringUpcomingRows');
+    if (recurringRows) recurringRows.innerHTML = `<tr><td colspan="5" style="padding:0.7rem; color:#6b7280;">No recurring charge data yet.</td></tr>`;
+    const recurringSummary = document.getElementById('recurringSummary');
+    if (recurringSummary) recurringSummary.textContent = 'No recurring data';
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
@@ -832,6 +842,49 @@ async function loadBudgetTrend() {
     } catch (error) {
         console.error('Failed to load budget trend:', error);
         chartDiv.innerHTML = '<p style="text-align:center;color:#ef4444;padding:2rem">Failed to load budget trend</p>';
+    }
+}
+
+function formatIsoDateForUi(value) {
+    if (!value) return '-';
+    const dt = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(dt.getTime())) return value;
+    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+async function loadRecurringUpcoming() {
+    const rowsEl = document.getElementById('recurringUpcomingRows');
+    const summaryEl = document.getElementById('recurringSummary');
+    if (!rowsEl || !summaryEl) return;
+
+    try {
+        const data = await api.getRecurringUpcoming(30, currentAccountId);
+        const items = data?.items || [];
+
+        if (!items.length) {
+            rowsEl.innerHTML = '<tr><td colspan="5" style="padding:0.7rem; color:#6b7280;">No upcoming recurring charges in the next 30 days.</td></tr>';
+            summaryEl.textContent = '0 due in next 30 days';
+            return;
+        }
+
+        summaryEl.textContent = `${items.length} due in next 30 days`;
+        rowsEl.innerHTML = items.map((item) => {
+            const confidence = Number(item.confidence || 0);
+            const confidenceColor = confidence >= 85 ? '#166534' : (confidence >= 60 ? '#92400e' : '#991b1b');
+            return `
+                <tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:0.45rem 0.25rem;">${escapeHtml(item.display_name || '-')}</td>
+                    <td style="padding:0.45rem 0.25rem;">${formatIsoDateForUi(item.expected_date)}</td>
+                    <td style="padding:0.45rem 0.25rem;">£${Number(item.expected_amount || 0).toFixed(2)}</td>
+                    <td style="padding:0.45rem 0.25rem;">${escapeHtml(item.category || 'Uncategorized')}</td>
+                    <td style="padding:0.45rem 0.25rem; color:${confidenceColor}; font-weight:600;">${confidence.toFixed(1)}%</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (error) {
+        console.error('Failed to load recurring upcoming charges:', error);
+        rowsEl.innerHTML = '<tr><td colspan="5" style="padding:0.7rem; color:#ef4444;">Failed to load recurring charges.</td></tr>';
+        summaryEl.textContent = 'Recurring data unavailable';
     }
 }
 

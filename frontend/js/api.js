@@ -444,6 +444,62 @@ const api = {
         return response.json();
     },
 
+    async recomputeRecurring({ lookbackMonths = 12, minOccurrences = 3, accountId = 'all' } = {}) {
+        const response = await authFetch(ENDPOINTS.recurringRecompute, {
+            method: 'POST',
+            body: JSON.stringify({
+                lookback_months: lookbackMonths,
+                min_occurrences: minOccurrences,
+                account_id: accountId,
+            }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to recompute recurring rules');
+        }
+        return response.json();
+    },
+
+    async getRecurring({ status = 'active', includeUpcoming = true, accountId = 'all' } = {}) {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        params.set('include_upcoming', includeUpcoming ? 'true' : 'false');
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        const response = await authFetch(`${ENDPOINTS.recurring}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch recurring rules');
+        }
+        return response.json();
+    },
+
+    async updateRecurringRule(ruleId, payload) {
+        const response = await authFetch(ENDPOINTS.recurringRule(ruleId), {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to update recurring rule');
+        }
+        return response.json();
+    },
+
+    async getRecurringUpcoming(days = 30, accountId = 'all') {
+        const params = new URLSearchParams({ days: String(days) });
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        const response = await authFetch(`${ENDPOINTS.recurringUpcoming}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch upcoming recurring charges');
+        }
+        return response.json();
+    },
+
     async getLatestReview(accountId = 'all', reviewType = null) {
         const params = new URLSearchParams();
         if (accountId && accountId !== 'all') params.set('account_id', accountId);

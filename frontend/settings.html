@@ -44,6 +44,30 @@
                 </div>
                 <div id="accountsList" class="budgets-list" style="margin-bottom:1.5rem;"></div>
 
+                <h2 style="margin-bottom:0.75rem;">Recurring Rules</h2>
+                <p style="color:#6b7280; font-size:0.875rem; margin-bottom:0.75rem;">
+                    Detect subscriptions and recurring commitments from historical transactions, then adjust category and status.
+                </p>
+                <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:end; margin-bottom:0.75rem;">
+                    <div>
+                        <label for="recurringAccountScope" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Account scope</label>
+                        <select id="recurringAccountScope" class="form-select" style="min-width:180px;">
+                            <option value="all">All accounts</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="recurringStatusFilter" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Status</label>
+                        <select id="recurringStatusFilter" class="form-select" style="min-width:140px;">
+                            <option value="active">Active</option>
+                            <option value="ignored">Ignored</option>
+                        </select>
+                    </div>
+                    <button id="recomputeRecurringBtn" onclick="recomputeRecurringRules()" class="btn" style="width:auto; padding:0.6rem 1rem;">Recompute Rules</button>
+                    <button onclick="loadRecurringRules()" class="btn btn-secondary" style="width:auto; padding:0.6rem 1rem;">Refresh</button>
+                </div>
+                <div id="recurringStatus" style="font-size:0.85rem; color:#6b7280; margin-bottom:0.5rem;"></div>
+                <div id="recurringRulesList" class="budgets-list" style="margin-bottom:1.5rem;"></div>
+
                 <!-- Card header -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
                     <h2 style="margin:0;">Categories</h2>

@@ -204,6 +204,29 @@
             </div>
         </div>
 
+        <div class="chart-card" style="margin-bottom: 1.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; gap:0.5rem; flex-wrap:wrap;">
+                <h3 style="margin:0;">Upcoming Recurring Charges</h3>
+                <div id="recurringSummary" style="font-size:0.875rem; color:#6b7280;">Loading...</div>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; min-width:640px;">
+                    <thead>
+                        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+                            <th style="padding:0.45rem 0.25rem;">Merchant</th>
+                            <th style="padding:0.45rem 0.25rem;">Expected date</th>
+                            <th style="padding:0.45rem 0.25rem;">Expected amount</th>
+                            <th style="padding:0.45rem 0.25rem;">Category</th>
+                            <th style="padding:0.45rem 0.25rem;">Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recurringUpcomingRows">
+                        <tr><td colspan="5" style="padding:0.7rem; color:#6b7280;">Loading recurring charges...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Upload -->
         <div class="upload-section">
             <h2>Upload Bank Statement</h2>

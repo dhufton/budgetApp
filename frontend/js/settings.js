@@ -5,6 +5,7 @@ let pendingKeywords   = {};  // {categoryName: [...keywords]} - unsaved changes
 let currentBudgets    = [];
 let currentSuggestions = {};
 let currentAccounts = [];
+let currentRecurringRules = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
@@ -16,6 +17,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadAccounts();
     await loadCategories();
     await loadBudgetTargets();
+    await loadRecurringRules();
+
+    document.getElementById('recurringAccountScope')?.addEventListener('change', loadRecurringRules);
+    document.getElementById('recurringStatusFilter')?.addEventListener('change', loadRecurringRules);
 });
 
 async function loadAccounts() {
@@ -23,6 +28,7 @@ async function loadAccounts() {
         const data = await api.getAccounts();
         currentAccounts = data?.accounts || [];
         renderAccounts();
+        populateRecurringAccountScope();
     } catch (error) {
         console.error('Failed to load accounts:', error);
         const el = document.getElementById('accountsList');
@@ -49,6 +55,22 @@ function renderAccounts() {
             </div>
         </div>
     `).join('');
+}
+
+function populateRecurringAccountScope() {
+    const select = document.getElementById('recurringAccountScope');
+    if (!select) return;
+
+    const selected = select.value || 'all';
+    select.innerHTML = '<option value="all">All accounts</option>' + currentAccounts
+        .map((acc) => `<option value="${escAttr(acc.id)}">${escHtml(acc.name)}</option>`)
+        .join('');
+
+    if (selected === 'all' || currentAccounts.some((acc) => acc.id === selected)) {
+        select.value = selected;
+    } else {
+        select.value = 'all';
+    }
 }
 
 async function createAccount() {
@@ -80,6 +102,132 @@ async function deleteAccount(accountId) {
         await loadAccounts();
     } catch (error) {
         alert('Failed to delete account: ' + error.message);
+    }
+}
+
+function recurringStatusBadge(status) {
+    if (status === 'ignored') {
+        return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#e5e7eb;color:#374151;font-size:0.75rem;font-weight:600;">Ignored</span>';
+    }
+    return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.75rem;font-weight:600;">Active</span>';
+}
+
+function recurringCadenceLabel(cadence) {
+    if (!cadence) return 'Irregular';
+    const value = String(cadence).toLowerCase();
+    if (value === 'biweekly') return 'Biweekly';
+    return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function renderRecurringRules() {
+    const listEl = document.getElementById('recurringRulesList');
+    if (!listEl) return;
+    if (currentRecurringRules.length === 0) {
+        listEl.innerHTML = '<p style="color:#9ca3af; font-size:0.875rem;">No recurring rules found for this scope.</p>';
+        return;
+    }
+
+    listEl.innerHTML = currentRecurringRules.map((rule) => `
+        <div class="budget-item">
+            <div class="budget-info" style="max-width:65%;">
+                <span class="budget-category">${escHtml(rule.display_name || 'Unknown')}</span>
+                <span class="budget-amount" style="font-size:0.82rem; color:#6b7280;">
+                    ${recurringCadenceLabel(rule.cadence)} | £${Number(rule.average_amount || 0).toFixed(2)} | Next: ${escHtml(rule.next_expected_date || '-')} | Confidence: ${Number(rule.confidence || 0).toFixed(1)}%
+                </span>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                ${recurringStatusBadge(rule.status)}
+                <select id="recurring-category-${escId(rule.id)}" class="form-select" style="min-width:130px; height:34px; padding:0.25rem 0.45rem;">
+                    ${allCategoriesData.map((cat) => {
+                        const selected = cat.name === rule.category ? 'selected' : '';
+                        return `<option value="${escHtml(cat.name)}" ${selected}>${escHtml(cat.name)}</option>`;
+                    }).join('')}
+                </select>
+                <button class="btn btn-secondary" style="width:auto; padding:0.35rem 0.65rem;" onclick="saveRecurringRule('${escAttr(rule.id)}')">Save</button>
+                <button class="btn btn-secondary" style="width:auto; padding:0.35rem 0.65rem;" onclick="toggleRecurringStatus('${escAttr(rule.id)}', '${escAttr(rule.status)}')">
+                    ${rule.status === 'active' ? 'Ignore' : 'Restore'}
+                </button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function loadRecurringRules() {
+    const statusEl = document.getElementById('recurringStatus');
+    const scope = document.getElementById('recurringAccountScope')?.value || 'all';
+    const status = document.getElementById('recurringStatusFilter')?.value || 'active';
+
+    if (statusEl) statusEl.textContent = 'Loading recurring rules...';
+    try {
+        const data = await api.getRecurring({ status, includeUpcoming: true, accountId: scope });
+        currentRecurringRules = data?.rules || [];
+        renderRecurringRules();
+        if (statusEl) statusEl.textContent = `${currentRecurringRules.length} ${status} rule(s)`;
+    } catch (error) {
+        console.error('Failed to load recurring rules:', error);
+        currentRecurringRules = [];
+        renderRecurringRules();
+        if (statusEl) statusEl.textContent = `Failed to load recurring rules: ${error.message}`;
+    }
+}
+
+async function recomputeRecurringRules() {
+    const btn = document.getElementById('recomputeRecurringBtn');
+    const statusEl = document.getElementById('recurringStatus');
+    const scope = document.getElementById('recurringAccountScope')?.value || 'all';
+
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Recomputing...';
+    }
+    if (statusEl) statusEl.textContent = 'Recomputing recurring rules...';
+
+    try {
+        const result = await api.recomputeRecurring({
+            lookbackMonths: 12,
+            minOccurrences: 3,
+            accountId: scope,
+        });
+        if (statusEl) {
+            statusEl.textContent = `Recompute complete: ${result.rules_created || 0} created, ${result.rules_updated || 0} updated, ${result.scanned_transactions || 0} scanned.`;
+        }
+        await loadRecurringRules();
+    } catch (error) {
+        console.error('Failed to recompute recurring rules:', error);
+        if (statusEl) statusEl.textContent = `Recompute failed: ${error.message}`;
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Recompute Rules';
+        }
+    }
+}
+
+async function saveRecurringRule(ruleId) {
+    const select = document.getElementById(`recurring-category-${escId(ruleId)}`);
+    const statusEl = document.getElementById('recurringStatus');
+    if (!select) return;
+
+    try {
+        await api.updateRecurringRule(ruleId, { category: select.value });
+        if (statusEl) statusEl.textContent = 'Recurring rule updated.';
+        await loadRecurringRules();
+    } catch (error) {
+        console.error('Failed to update recurring rule:', error);
+        if (statusEl) statusEl.textContent = `Update failed: ${error.message}`;
+    }
+}
+
+async function toggleRecurringStatus(ruleId, currentStatus) {
+    const nextStatus = currentStatus === 'active' ? 'ignored' : 'active';
+    const statusEl = document.getElementById('recurringStatus');
+    try {
+        await api.updateRecurringRule(ruleId, { status: nextStatus });
+        if (statusEl) statusEl.textContent = `Rule marked ${nextStatus}.`;
+        await loadRecurringRules();
+    } catch (error) {
+        console.error('Failed to update recurring status:', error);
+        if (statusEl) statusEl.textContent = `Status update failed: ${error.message}`;
     }
 }
 
