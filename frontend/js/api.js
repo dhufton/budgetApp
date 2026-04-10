@@ -475,6 +475,19 @@ const api = {
         return response.json();
     },
 
+    async createRecurringRule(payload) {
+        const response = await authFetch(ENDPOINTS.recurring, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to create recurring rule');
+        }
+        return response.json();
+    },
+
     async updateRecurringRule(ruleId, payload) {
         const response = await authFetch(ENDPOINTS.recurringRule(ruleId), {
             method: 'PATCH',

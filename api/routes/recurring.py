@@ -27,6 +27,17 @@ class RecomputeRequest(BaseModel):
     account_id: str = "all"
 
 
+class CreateRecurringRequest(BaseModel):
+    account_id: str
+    display_name: str = Field(min_length=1, max_length=200)
+    category: str = Field(default="Uncategorized", min_length=1, max_length=80)
+    cadence: str = Field(default="monthly")
+    average_amount: float = Field(gt=0)
+    next_expected_date: date
+    confidence: float = Field(default=95, ge=0, le=100)
+    status: str = Field(default="active")
+
+
 class UpdateRecurringRequest(BaseModel):
     status: Optional[str] = None
     category: Optional[str] = None
@@ -99,6 +110,50 @@ def _default_account_id(user_id: str) -> Optional[str]:
         return None
     default_row = next((row for row in rows if row.get("is_default")), None)
     return (default_row or rows[0]).get("id")
+
+
+@router.post("/recurring")
+async def create_recurring_rule(request: CreateRecurringRequest, user_id: str = Depends(get_current_user)):
+    account_id = _validate_account_scope(user_id, request.account_id)
+    if account_id == "all":
+        raise HTTPException(status_code=400, detail="account_id must be a specific account")
+
+    cadence = (request.cadence or "").strip().lower()
+    if cadence not in {"weekly", "biweekly", "monthly", "irregular"}:
+        raise HTTPException(status_code=400, detail="Invalid cadence")
+
+    status = (request.status or "").strip().lower()
+    if status not in {"active", "ignored"}:
+        raise HTTPException(status_code=400, detail="Invalid status")
+
+    display_name = request.display_name.strip()
+    merchant_key = _merchant_key(display_name)
+    if not merchant_key:
+        raise HTTPException(status_code=400, detail="display_name is invalid")
+
+    row = {
+        "user_id": user_id,
+        "account_id": account_id,
+        "merchant_key": merchant_key,
+        "display_name": display_name,
+        "category": request.category.strip(),
+        "cadence": cadence,
+        "average_amount": round(abs(float(request.average_amount)), 2),
+        "confidence": float(request.confidence),
+        "occurrence_count": 1,
+        "last_seen_date": None,
+        "next_expected_date": request.next_expected_date.isoformat(),
+        "status": status,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+
+    result = (
+        supabase_admin.table("recurring_rules")
+        .upsert(row, on_conflict="user_id,account_id,merchant_key")
+        .execute()
+    )
+    created = (result.data or [row])[0]
+    return {"success": True, "rule": created}
 
 
 def _classify_cadence(sorted_dates: List[date]) -> Tuple[str, Optional[int]]:
