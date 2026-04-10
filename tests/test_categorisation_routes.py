@@ -44,6 +44,7 @@ def test_suggest_returns_structured_counts(monkeypatch):
         ],
     )
     monkeypatch.setattr(categorisation_route, "apply_user_keywords", lambda txns, user_id: txns)
+    monkeypatch.setattr(categorisation_route, "_apply_builtin_keyword_rules", lambda txns: txns)
     monkeypatch.setattr(categorisation_route, "apply_transfer_classification", lambda txns: txns)
     monkeypatch.setattr(categorisation_route, "_get_available_categories", lambda user_id: ["Food", "Uncategorized"]) 
     monkeypatch.setattr(categorisation_route, "_insert_suggestions", lambda rows: None)

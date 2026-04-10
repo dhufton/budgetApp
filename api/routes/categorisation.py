@@ -13,7 +13,7 @@ from api.dependencies import get_groq_service
 from api.groq_service import GroqService
 from api.routes.categories import apply_user_keywords
 from api.transfer_rules import apply_transfer_classification
-from src.config import BUILTIN_CATEGORIES
+from src.config import BUILTIN_CATEGORIES, CATEGORY_RULES
 from src.supabase_client import supabase_admin
 
 router = APIRouter()
@@ -153,6 +153,24 @@ def _save_learning_if_eligible(user_id: str, description: str, category: str, co
         logger.warning("learning upsert failed for description=%s: %r", description, e)
 
 
+def _apply_builtin_keyword_rules(transactions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Deterministic pass using built-in keyword rules before AI suggestions."""
+    for txn in transactions:
+        if txn.get("category") != "Uncategorized":
+            continue
+        description = str(txn.get("description", "")).upper()
+        for category, keywords in CATEGORY_RULES.items():
+            if category == "Transfer":
+                continue
+            for keyword in keywords:
+                if str(keyword).upper() in description:
+                    txn["category"] = category
+                    break
+            if txn.get("category") != "Uncategorized":
+                break
+    return transactions
+
+
 def _apply_transaction_category(user_id: str, transaction_id: str, category: str) -> None:
     supabase_admin.table("transactions").update({"category": category}).eq("id", transaction_id).eq("user_id", user_id).execute()
 
@@ -225,6 +243,7 @@ async def suggest_categories(
 
     # Pre-pass with deterministic rules.
     uncategorised = apply_user_keywords(uncategorised, user_id)
+    uncategorised = _apply_builtin_keyword_rules(uncategorised)
     uncategorised = apply_transfer_classification(uncategorised)
 
     available_categories = _get_available_categories(user_id)

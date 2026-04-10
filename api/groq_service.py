@@ -1,11 +1,12 @@
 import json
 import logging
+import os
 from groq import Groq
 from src.config import BUILTIN_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
-CATEGORISATION_MODEL = 'llama-3.1-8b-instant'
+CATEGORISATION_MODEL = os.environ.get('CATEGORISATION_MODEL', 'llama-3.1-8b-instant')
 INSIGHTS_MODEL       = 'llama-3.1-8b-instant'
 CHUNK_SIZE           = 50
 
@@ -67,7 +68,18 @@ Rules:
 - suggested_category must be from allowed categories exactly
 - confidence must be numeric 0-100
 - reason must be under 80 characters
-- if uncertain, use low confidence and/or Uncategorized"""
+- if uncertain, use low confidence and/or Uncategorized
+- prefer specific categories when merchant is recognisable (avoid defaulting to Uncategorized)
+
+Examples:
+- Pizza Hut / Domino's / McDonald's / KFC / Pret / Nando's -> Food
+- Tesco / Sainsbury's / Lidl / Aldi / Asda / Waitrose -> Food
+- Amazon / eBay / ASOS / Argos / Apple Store -> Shopping
+- TfL / Uber trip / Trainline / National Rail / Shell / BP -> Transport
+- Netflix / Spotify / Steam / Cinema -> Entertainment
+- Council Tax / British Gas / Thames Water / O2 / Rent -> Bills
+- Chase Saver / ISA / Pension / savings transfer -> Savings
+- Credit card payment / internal transfer / balance payment -> Transfer"""
 
 
 class GroqService:
@@ -281,6 +293,7 @@ class GroqService:
             }
             for t in transactions
         ]
+        description_by_id = {row["transaction_id"]: row["description"] for row in payload}
 
         results = []
         for i in range(0, len(payload), CHUNK_SIZE):
@@ -333,16 +346,37 @@ class GroqService:
 
         # Ensure all input transactions are represented at least once.
         existing = {row.get("transaction_id") for row in results}
-        for tx in payload:
-            tx_id = tx.get("transaction_id")
-            if tx_id not in existing:
+        missing_ids = [tx.get("transaction_id") for tx in payload if tx.get("transaction_id") not in existing]
+        if missing_ids:
+            # Secondary fallback: use vendor mapping pipeline for any transactions the model omitted.
+            try:
+                fallback_descriptions = [description_by_id.get(tx_id, "") for tx_id in missing_ids]
+                fallback_map = self.categorise_vendors(fallback_descriptions, force_groq=False)
+            except Exception:
+                fallback_map = {}
+
+            for tx_id in missing_ids:
+                description = description_by_id.get(tx_id, "")
+                fallback_category = fallback_map.get(description, "Uncategorized")
+                if fallback_category != "Uncategorized":
+                    confidence = 68.0
+                    reason = "Fallback vendor mapping"
+                else:
+                    confidence = 0.0
+                    reason = "No suggestion returned"
                 results.append(
                     {
                         "transaction_id": tx_id,
-                        "suggested_category": "Uncategorized",
-                        "confidence": 0.0,
-                        "reason": "No suggestion returned",
+                        "suggested_category": fallback_category,
+                        "confidence": confidence,
+                        "reason": reason,
                         "model_name": CATEGORISATION_MODEL,
                     }
                 )
+        logger.info(
+            "suggest_transaction_categories_complete total=%s returned=%s missing_fallback=%s",
+            len(payload),
+            len(results),
+            len(missing_ids),
+        )
         return results
