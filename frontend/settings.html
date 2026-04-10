@@ -66,6 +66,41 @@
                     <button onclick="loadRecurringRules()" class="btn btn-secondary" style="width:auto; padding:0.6rem 1rem;">Refresh</button>
                 </div>
                 <div id="recurringStatus" style="font-size:0.85rem; color:#6b7280; margin-bottom:0.5rem;"></div>
+
+                <div style="display:grid; grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr auto; gap:0.5rem; align-items:end; margin-bottom:0.75rem;">
+                    <div>
+                        <label for="manualRecurringName" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Merchant/Rule name</label>
+                        <input id="manualRecurringName" type="text" placeholder="e.g. Spotify" />
+                    </div>
+                    <div>
+                        <label for="manualRecurringAccount" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Account</label>
+                        <select id="manualRecurringAccount" class="form-select"></select>
+                    </div>
+                    <div>
+                        <label for="manualRecurringCategory" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Category</label>
+                        <select id="manualRecurringCategory" class="form-select"></select>
+                    </div>
+                    <div>
+                        <label for="manualRecurringCadence" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Cadence</label>
+                        <select id="manualRecurringCadence" class="form-select">
+                            <option value="weekly">Weekly</option>
+                            <option value="biweekly">Biweekly</option>
+                            <option value="monthly" selected>Monthly</option>
+                            <option value="irregular">Irregular</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="manualRecurringAmount" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Amount (£)</label>
+                        <input id="manualRecurringAmount" type="number" min="0.01" step="0.01" placeholder="12.99" />
+                    </div>
+                    <div>
+                        <label for="manualRecurringDate" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Next date</label>
+                        <input id="manualRecurringDate" type="date" />
+                    </div>
+                </div>
+                <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
+                    <button onclick="createRecurringRule()" class="btn" style="width:auto; padding:0.6rem 1rem;">Add Recurring Rule</button>
+                </div>
                 <div id="recurringRulesList" class="budgets-list" style="margin-bottom:1.5rem;"></div>
 
                 <!-- Card header -->

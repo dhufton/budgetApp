@@ -29,6 +29,7 @@ async function loadAccounts() {
         currentAccounts = data?.accounts || [];
         renderAccounts();
         populateRecurringAccountScope();
+        populateManualRecurringInputs();
     } catch (error) {
         console.error('Failed to load accounts:', error);
         const el = document.getElementById('accountsList');
@@ -70,6 +71,23 @@ function populateRecurringAccountScope() {
         select.value = selected;
     } else {
         select.value = 'all';
+    }
+}
+
+function populateManualRecurringInputs() {
+    const accountSelect = document.getElementById('manualRecurringAccount');
+    if (accountSelect) {
+        accountSelect.innerHTML = currentAccounts.map((acc) =>
+            `<option value="${escAttr(acc.id)}">${escHtml(acc.name)}</option>`
+        ).join('');
+    }
+
+    const categorySelect = document.getElementById('manualRecurringCategory');
+    if (categorySelect) {
+        const names = allCategoriesData.length ? allCategoriesData.map((cat) => cat.name) : ['Uncategorized'];
+        categorySelect.innerHTML = names.map((name) =>
+            `<option value="${escHtml(name)}">${escHtml(name)}</option>`
+        ).join('');
     }
 }
 
@@ -203,6 +221,43 @@ async function recomputeRecurringRules() {
     }
 }
 
+async function createRecurringRule() {
+    const name = document.getElementById('manualRecurringName')?.value.trim();
+    const accountId = document.getElementById('manualRecurringAccount')?.value;
+    const category = document.getElementById('manualRecurringCategory')?.value || 'Uncategorized';
+    const cadence = document.getElementById('manualRecurringCadence')?.value || 'monthly';
+    const amount = parseFloat(document.getElementById('manualRecurringAmount')?.value || '0');
+    const nextDate = document.getElementById('manualRecurringDate')?.value;
+    const statusEl = document.getElementById('recurringStatus');
+
+    if (!name) return alert('Please enter a merchant/rule name.');
+    if (!accountId) return alert('Please select an account.');
+    if (!Number.isFinite(amount) || amount <= 0) return alert('Please enter a valid amount.');
+    if (!nextDate) return alert('Please select next expected date.');
+
+    try {
+        await api.createRecurringRule({
+            account_id: accountId,
+            display_name: name,
+            category,
+            cadence,
+            average_amount: amount,
+            next_expected_date: nextDate,
+            confidence: 95,
+            status: 'active',
+        });
+
+        document.getElementById('manualRecurringName').value = '';
+        document.getElementById('manualRecurringAmount').value = '';
+        document.getElementById('manualRecurringDate').value = '';
+        if (statusEl) statusEl.textContent = 'Recurring rule created.';
+        await loadRecurringRules();
+    } catch (error) {
+        console.error('Failed to create recurring rule:', error);
+        if (statusEl) statusEl.textContent = `Create failed: ${error.message}`;
+    }
+}
+
 async function saveRecurringRule(ruleId) {
     const select = document.getElementById(`recurring-category-${escId(ruleId)}`);
     const statusEl = document.getElementById('recurringStatus');
@@ -254,6 +309,7 @@ async function loadCategories() {
         });
         renderCategories();
         updateBudgetCategoryDropdown();
+        populateManualRecurringInputs();
     } catch (error) {
         console.error('Failed to load categories:', error);
         document.getElementById('categoriesList').innerHTML =
