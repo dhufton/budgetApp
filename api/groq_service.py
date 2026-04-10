@@ -47,6 +47,28 @@ Given transactions with amounts and category averages, identify unusual ones.
 Return a JSON array: [{"id": "...", "description": "...", "reason": "..."}].
 Return an empty array if nothing looks unusual. Keep reasons under 10 words."""
 
+SUGGESTION_SYSTEM_PROMPT = """You are a UK bank transaction categoriser.
+Classify each transaction into one category and provide confidence and a short reason.
+
+Return ONLY a valid JSON object in this shape:
+{
+  "suggestions": [
+    {
+      "transaction_id": "input id",
+      "suggested_category": "one of allowed categories",
+      "confidence": 0-100,
+      "reason": "short reason"
+    }
+  ]
+}
+
+Rules:
+- transaction_id must match an input id
+- suggested_category must be from allowed categories exactly
+- confidence must be numeric 0-100
+- reason must be under 80 characters
+- if uncertain, use low confidence and/or Uncategorized"""
+
 
 class GroqService:
     def __init__(self, api_key: str, supabase_client):
@@ -231,3 +253,96 @@ class GroqService:
         except Exception as e:
             logger.error('Anomaly detection failed: %r', e)
             return []
+
+    def suggest_transaction_categories(self, transactions: list, allowed_categories: list) -> list:
+        """
+        Suggest category + confidence + reason for each transaction.
+        Returns:
+        [
+          {
+            "transaction_id": "...",
+            "suggested_category": "...",
+            "confidence": 0..100,
+            "reason": "...",
+            "model_name": CATEGORISATION_MODEL
+          }
+        ]
+        """
+        if not transactions:
+            return []
+
+        categories = allowed_categories or sorted(VALID_CATEGORIES)
+        payload = [
+            {
+                "transaction_id": str(t.get("id", "")),
+                "description": str(t.get("description", "")),
+                "amount": t.get("amount"),
+                "date": t.get("date"),
+            }
+            for t in transactions
+        ]
+
+        results = []
+        for i in range(0, len(payload), CHUNK_SIZE):
+            chunk = payload[i:i + CHUNK_SIZE]
+            try:
+                raw = self._call_groq_json(
+                    SUGGESTION_SYSTEM_PROMPT,
+                    "Allowed categories: "
+                    + json.dumps(categories)
+                    + "\nTransactions: "
+                    + json.dumps(chunk),
+                    max_tokens=1400,
+                )
+                suggestions = raw.get("suggestions", []) if isinstance(raw, dict) else []
+                for item in suggestions:
+                    tx_id = str(item.get("transaction_id", "")).strip()
+                    suggested = str(item.get("suggested_category", "Uncategorized")).strip()
+                    if suggested not in categories:
+                        suggested = "Uncategorized"
+                    try:
+                        confidence = float(item.get("confidence", 0))
+                    except (TypeError, ValueError):
+                        confidence = 0.0
+                    confidence = max(0.0, min(100.0, confidence))
+                    reason = str(item.get("reason", "")).strip()[:80]
+                    if not tx_id:
+                        continue
+                    results.append(
+                        {
+                            "transaction_id": tx_id,
+                            "suggested_category": suggested,
+                            "confidence": confidence,
+                            "reason": reason,
+                            "model_name": CATEGORISATION_MODEL,
+                        }
+                    )
+            except Exception as e:
+                logger.error("suggest_transaction_categories chunk failed: %r", e)
+                # fallback per transaction
+                for tx in chunk:
+                    results.append(
+                        {
+                            "transaction_id": tx.get("transaction_id"),
+                            "suggested_category": "Uncategorized",
+                            "confidence": 0.0,
+                            "reason": "Model unavailable",
+                            "model_name": CATEGORISATION_MODEL,
+                        }
+                    )
+
+        # Ensure all input transactions are represented at least once.
+        existing = {row.get("transaction_id") for row in results}
+        for tx in payload:
+            tx_id = tx.get("transaction_id")
+            if tx_id not in existing:
+                results.append(
+                    {
+                        "transaction_id": tx_id,
+                        "suggested_category": "Uncategorized",
+                        "confidence": 0.0,
+                        "reason": "No suggestion returned",
+                        "model_name": CATEGORISATION_MODEL,
+                    }
+                )
+        return results

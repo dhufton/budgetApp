@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
-from api.routes import transactions, upload, categories, budget, accounts, reviews
+from api.routes import transactions, upload, categories, budget, accounts, reviews, categorisation
 from api.dependencies import get_supabase, get_groq_service
 from fastapi import FastAPI, Depends, HTTPException, Request
 from api.auth import get_current_user
@@ -54,6 +54,7 @@ app.include_router(categories.router,   prefix="/api", tags=["categories"])
 app.include_router(budget.router,       prefix="/api", tags=["budget"])
 app.include_router(accounts.router,     prefix="/api", tags=["accounts"])
 app.include_router(reviews.router,      prefix="/api", tags=["reviews"])
+app.include_router(categorisation.router, prefix="/api", tags=["categorisation"])
 
 
 def _apply_account_filter(query, account_id: str):

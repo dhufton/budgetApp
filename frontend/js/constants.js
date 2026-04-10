@@ -31,4 +31,10 @@ const ENDPOINTS = {
     reviewsHistory:    '/api/reviews/history',
     reviewsGenerate:   '/api/reviews/generate',
     reviewsGenerateMonthly: '/api/reviews/generate-monthly',
+    categoriseSuggest: '/api/categorise/suggest',
+    categoriseReviewQueue: '/api/categorise/review-queue',
+    categoriseApprove: '/api/categorise/approve',
+    categoriseOverride: '/api/categorise/override',
+    categoriseReject: '/api/categorise/reject',
+    categoriseAcceptHighConfidence: '/api/categorise/accept-high-confidence',
 };
