@@ -235,10 +235,13 @@ const api = {
         }
     },
 
-    async getBudgetHealth(month = null) {
+    async getBudgetHealth(month = null, accountId = 'all') {
         try {
-            const qs = month ? `?month=${encodeURIComponent(month)}` : '';
-            const response = await authFetch(`${ENDPOINTS.budgetHealth}${qs}`);
+            const params = new URLSearchParams();
+            if (month) params.set('month', month);
+            if (accountId && accountId !== 'all') params.set('account_id', accountId);
+            const qs = params.toString();
+            const response = await authFetch(`${ENDPOINTS.budgetHealth}${qs ? `?${qs}` : ''}`);
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -248,9 +251,11 @@ const api = {
         }
     },
 
-    async getBudgetTrend(months = 6) {
+    async getBudgetTrend(months = 6, accountId = 'all') {
         try {
-            const response = await authFetch(`${ENDPOINTS.budgetTrend}?months=${months}`);
+            const params = new URLSearchParams({ months: String(months) });
+            if (accountId && accountId !== 'all') params.set('account_id', accountId);
+            const response = await authFetch(`${ENDPOINTS.budgetTrend}?${params.toString()}`);
             if (!response) return null;
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             return response.json();
@@ -362,3 +367,6 @@ const api = {
         return response.json();
     },
 };
+
+// Explicitly expose API on window to avoid any cross-script global binding ambiguity.
+window.api = api;

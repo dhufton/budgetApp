@@ -271,9 +271,9 @@ function calculateMetrics() {
     const net = income - spending;
     const totalSpentEl = document.getElementById('totalSpent');
     const netSavedEl   = document.getElementById('netSaved');
-    if (totalSpentEl) totalSpentEl.textContent = spending.toFixed(2);
+    if (totalSpentEl) totalSpentEl.textContent = `£${spending.toFixed(2)}`;
     if (netSavedEl) {
-        netSavedEl.textContent = Math.abs(net).toFixed(2);
+        netSavedEl.textContent = `£${Math.abs(net).toFixed(2)}`;
         netSavedEl.className = `value ${net >= 0 ? 'text-green' : 'text-red'}`;
     }
 }
@@ -432,7 +432,7 @@ async function loadBudgetHealth() {
     if (!rowsEl || !summaryEl) return;
 
     try {
-        const data = await api.getBudgetHealth();
+        const data = await api.getBudgetHealth(null, currentAccountId);
         const categories = data?.categories || [];
         const summary = data?.summary || { target_total: 0, actual_total: 0 };
         const monthLabel = data?.month || '';
@@ -470,7 +470,7 @@ async function loadBudgetTrend() {
     if (!chartDiv) return;
 
     try {
-        const data = await api.getBudgetTrend(6);
+        const data = await api.getBudgetTrend(6, currentAccountId);
         const months = data?.months || [];
         const series = data?.series || [];
 

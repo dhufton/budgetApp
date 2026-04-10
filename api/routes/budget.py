@@ -180,7 +180,8 @@ async def get_budget_comparison(account_id: str = "all", user_id: str = Depends(
         tx_query = supabase_admin.table("transactions") \
             .select("category, amount") \
             .eq("user_id", user_id) \
-            .gte("date", f"{current_month}-01") \
+            .gte("date", month_start.isoformat()) \
+            .lt("date", next_month_start.isoformat()) \
             .lt("amount", 0)
         if account_id != "all":
             tx_query = tx_query.eq("account_id", account_id)
@@ -221,6 +222,7 @@ async def get_budget_comparison(account_id: str = "all", user_id: str = Depends(
 
 @router.get("/budget-health")
 async def get_budget_health(
+        account_id: str = "all",
         month: Optional[str] = None,
         user_id: str = Depends(get_current_user)
 ):
@@ -242,17 +244,21 @@ async def get_budget_health(
             for row in (targets_result.data or [])
         }
 
-        tx_result = supabase_admin.table("transactions") \
+        tx_query = supabase_admin.table("transactions") \
             .select("category, amount") \
             .eq("user_id", user_id) \
             .gte("date", month_start.isoformat()) \
             .lt("date", next_month_start.isoformat()) \
-            .lt("amount", 0) \
-            .execute()
+            .lt("amount", 0)
+        if account_id != "all":
+            tx_query = tx_query.eq("account_id", account_id)
+        tx_result = tx_query.execute()
 
         spending = {}
         for txn in (tx_result.data or []):
             category = txn["category"]
+            if category == "Transfer":
+                continue
             spending[category] = spending.get(category, 0.0) + abs(float(txn["amount"]))
 
         categories = []
@@ -292,6 +298,7 @@ async def get_budget_health(
 @router.get("/budget-trend")
 async def get_budget_trend(
         months: int = 6,
+        account_id: str = "all",
         user_id: str = Depends(get_current_user)
 ):
     """Budget trend for recent months: target vs actual by category."""
@@ -316,18 +323,22 @@ async def get_budget_trend(
             for row in (targets_result.data or [])
         }
 
-        tx_result = supabase_admin.table("transactions") \
+        tx_query = supabase_admin.table("transactions") \
             .select("date, category, amount") \
             .eq("user_id", user_id) \
             .gte("date", range_start.isoformat()) \
             .lt("date", range_end_exclusive.isoformat()) \
-            .lt("amount", 0) \
-            .execute()
+            .lt("amount", 0)
+        if account_id != "all":
+            tx_query = tx_query.eq("account_id", account_id)
+        tx_result = tx_query.execute()
 
         monthly_spend = {}
         for txn in (tx_result.data or []):
             month_key = str(txn["date"])[:7]
             category = txn["category"]
+            if category == "Transfer":
+                continue
             if month_key not in monthly_spend:
                 monthly_spend[month_key] = {}
             monthly_spend[month_key][category] = monthly_spend[month_key].get(category, 0.0) + abs(float(txn["amount"]))

@@ -1,0 +1,93 @@
+# agents.md
+
+This file is for coding agents working in this repository.
+
+## Objective
+
+Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
+- Supabase schema contract
+- account-aware transaction flows
+- deterministic + AI-assisted categorisation pipeline
+
+## Repo Map (What Lives Where)
+
+- `api/main.py`: App bootstrap, middleware, static page routes, AI insight/suggestion/categorise endpoints.
+- `api/auth.py`: Bearer token authentication (Supabase user lookup).
+- `api/dependencies.py`: Cached app dependencies (`get_supabase`, `get_groq_service`).
+- `api/groq_service.py`: Groq wrappers for categorisation, insights, budget suggestions.
+- `api/transfer_rules.py`: Regex-based transfer detection and classification.
+- `api/routes/accounts.py`: Multi-account CRUD and default-account safeguards.
+- `api/routes/upload.py`: Statement upload flow (parse -> classify -> persist).
+- `api/routes/transactions.py`: Transaction list + category update.
+- `api/routes/categories.py`: Category CRUD + keyword upsert + keyword classification helper.
+- `api/routes/budget.py`: Budget targets/comparison/health/trend endpoints.
+- `frontend/*.html`: Page templates served by FastAPI.
+- `frontend/js/constants.js`: Shared endpoint URLs + default category constants.
+- `frontend/js/api.js`: Authenticated API client used by page scripts.
+- `frontend/js/dashboard.js`: Upload/dashboard analytics UI logic.
+- `frontend/js/settings.js`: Accounts, categories, budgets settings logic.
+- `frontend/js/transactions.js`: Transaction list/filter/edit UI logic.
+- `src/config.py`: Built-in categories + deterministic keyword rules.
+- `src/supabase_client.py`: Global Supabase anon/admin clients.
+- `src/ingestion/parser.py`: Chase PDF and Amex CSV parsing.
+- `src/ingestion/storage.py` + `src/ingestion/b2_client.py`: B2 storage operations.
+- `src/ingestion/learning.py`: Learned categorisation rule helpers.
+- `supabase/schema_contract.sql`: Canonical schema contract.
+- `docs/supabase-schema-contract.md`: Human-readable schema contract.
+- `tests/`: Route and transfer-rule unit tests.
+
+## Critical Contracts (Do Not Drift)
+
+1. Built-in categories must remain aligned across:
+- `src/config.py`
+- `frontend/js/constants.js`
+- `docs/supabase-schema-contract.md`
+
+2. Schema changes must be paired:
+- Update `supabase/schema_contract.sql`
+- Add/adjust migration in `supabase/migrations/`
+- Update route + frontend payload assumptions
+
+3. Account-aware behavior:
+- `POST /api/upload` requires `account_id`
+- List/analytics endpoints using `account_id` query must preserve `all` behavior
+
+4. Categorisation order of operations:
+- deterministic keywords/user keywords/transfer rules before Groq fallback
+
+## Safe Change Workflow
+
+1. Read impacted API route(s), corresponding frontend script(s), and schema contract first.
+2. Prefer minimal, local edits over broad refactors.
+3. Keep request/response shapes backward-compatible unless intentionally versioned.
+4. Update tests (or add targeted tests) when behavior changes.
+5. Run tests before finalizing.
+
+## Validation Commands
+
+Install:
+```bash
+pip install -r requirements-dev.txt
+```
+
+Run tests:
+```bash
+pytest -q
+```
+
+Run app:
+```bash
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Common Pitfalls
+
+- Editing only backend category constants and forgetting frontend defaults.
+- Introducing schema field renames without updating docs/routes/UI.
+- Breaking auth flow by bypassing `Authorization: Bearer <token>` usage in frontend API calls.
+- Reordering classification steps so transfer detection or user keywords no longer run before Groq.
+
+## Out of Scope for Routine Changes
+
+- Do not edit `.pyc` files under `__pycache__`.
+- Do not treat stale cache files as source of truth.
