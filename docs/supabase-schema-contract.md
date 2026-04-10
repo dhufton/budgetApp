@@ -52,6 +52,7 @@ If any table/column is renamed, API routes and frontend payloads must be updated
 - `user_id` `uuid` not null references `users(id)`
 - `category` `text` not null
 - `target_amount` `numeric(12,2)` not null
+- `threshold_percent` `numeric(5,2)` not null default `80`
 - `created_at` `timestamptz` default `now()`
 - Unique key: `(user_id, category)`
 

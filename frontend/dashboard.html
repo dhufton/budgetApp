@@ -110,6 +110,31 @@
             </div>
         </div>
 
+        <!-- Budget health -->
+        <div class="chart-card" style="margin-bottom: 1.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; gap:0.5rem; flex-wrap:wrap;">
+                <h3 style="margin:0;">Budget Health (This Month)</h3>
+                <div id="budgetHealthSummary" style="font-size:0.875rem; color:#6b7280;">Loading...</div>
+            </div>
+            <div id="budgetHealthEmpty" class="hidden" style="font-size:0.875rem; color:#6b7280; padding:0.5rem 0;">No budget targets yet. Add targets in Settings to see health status.</div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%; min-width:520px;">
+                    <thead>
+                        <tr style="text-align:left; border-bottom:1px solid #e5e7eb;">
+                            <th style="padding:0.5rem 0.25rem;">Category</th>
+                            <th style="padding:0.5rem 0.25rem;">Target</th>
+                            <th style="padding:0.5rem 0.25rem;">Actual</th>
+                            <th style="padding:0.5rem 0.25rem;">Used</th>
+                            <th style="padding:0.5rem 0.25rem;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="budgetHealthRows">
+                        <tr><td colspan="5" style="padding:1rem;color:#6b7280;">Loading budget health...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Uncategorised alert -->
         <div id="uncategorizedAlert" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4 flex items-center justify-between">
             <div class="flex items-center gap-3">
@@ -166,6 +191,11 @@
         <div class="chart-card" style="margin: 2rem 0;">
             <h3>📈 Category Spending Over Time</h3>
             <div id="categorySpendingChart"></div>
+        </div>
+
+        <div class="chart-card" style="margin: 2rem 0;">
+            <h3>🎯 Budget Target vs Actual Trend</h3>
+            <div id="budgetTrendChart"></div>
         </div>
 
         <!-- Transactions -->

@@ -196,12 +196,16 @@ async function loadDashboard() {
 
         if (allTransactions.length === 0) {
             showEmptyState();
+            await loadBudgetHealth();
+            await loadBudgetTrend();
         } else {
             populateCategoryFilter();
             calculateMetrics();
             renderPieChart();
             renderLineChart();
             renderCategorySpendingChart();
+            await loadBudgetHealth();
+            await loadBudgetTrend();
             sortTable('date');
             loadInsights();
         }
@@ -286,6 +290,12 @@ function showLoading(loading) {
     if (pieChart) pieChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Loading chart...</p>`;
     const lineChart = document.getElementById('lineChart');
     if (lineChart) lineChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Loading chart...</p>`;
+    const budgetTrendChart = document.getElementById('budgetTrendChart');
+    if (budgetTrendChart) budgetTrendChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Loading budget trend...</p>`;
+    const budgetHealthRows = document.getElementById('budgetHealthRows');
+    if (budgetHealthRows) budgetHealthRows.innerHTML = `<tr><td colspan="5" style="padding:1rem;color:#6b7280;">Loading budget health...</td></tr>`;
+    const budgetHealthSummary = document.getElementById('budgetHealthSummary');
+    if (budgetHealthSummary) budgetHealthSummary.textContent = 'Loading...';
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
@@ -297,6 +307,12 @@ function showEmptyState() {
     if (pieChart) pieChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Upload a statement to see spending breakdown</p>`;
     const lineChart = document.getElementById('lineChart');
     if (lineChart) lineChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Upload a statement to see monthly trends</p>`;
+    const budgetTrendChart = document.getElementById('budgetTrendChart');
+    if (budgetTrendChart) budgetTrendChart.innerHTML = `<p style="text-align:center;color:#6b7280;padding:2rem">Add budget targets to see trend</p>`;
+    const budgetHealthRows = document.getElementById('budgetHealthRows');
+    if (budgetHealthRows) budgetHealthRows.innerHTML = `<tr><td colspan="5" style="padding:1rem;color:#6b7280;">No budget data yet.</td></tr>`;
+    const budgetHealthSummary = document.getElementById('budgetHealthSummary');
+    if (budgetHealthSummary) budgetHealthSummary.textContent = 'No budget data';
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
@@ -397,6 +413,114 @@ function renderCategorySpendingChart() {
         legend: { orientation: 'h', y: -0.3, x: 0.5, xanchor: 'center' },
         hovermode: 'x unified'
     }, { responsive: true });
+}
+
+// ---------------------------------------------------------------------------
+// Budget health and trend
+// ---------------------------------------------------------------------------
+function statusBadge(status) {
+    if (status === 'over_budget') return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:0.75rem;font-weight:600;">Over budget</span>';
+    if (status === 'at_risk') return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#fef3c7;color:#92400e;font-size:0.75rem;font-weight:600;">At risk</span>';
+    if (status === 'on_track') return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.75rem;font-weight:600;">On track</span>';
+    return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#e5e7eb;color:#374151;font-size:0.75rem;font-weight:600;">No target</span>';
+}
+
+async function loadBudgetHealth() {
+    const rowsEl = document.getElementById('budgetHealthRows');
+    const summaryEl = document.getElementById('budgetHealthSummary');
+    const emptyEl = document.getElementById('budgetHealthEmpty');
+    if (!rowsEl || !summaryEl) return;
+
+    try {
+        const data = await api.getBudgetHealth();
+        const categories = data?.categories || [];
+        const summary = data?.summary || { target_total: 0, actual_total: 0 };
+        const monthLabel = data?.month || '';
+
+        if (categories.length === 0) {
+            rowsEl.innerHTML = '<tr><td colspan="5" style="padding:1rem;color:#6b7280;">No budget targets or spending this month.</td></tr>';
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            summaryEl.textContent = `${monthLabel} | Target £0 | Actual £0`;
+            return;
+        }
+
+        if (emptyEl) emptyEl.classList.add('hidden');
+        const atRisk = categories.filter(c => c.status === 'at_risk').length;
+        const over = categories.filter(c => c.status === 'over_budget').length;
+        summaryEl.textContent = `${monthLabel} | Target £${summary.target_total.toFixed(2)} | Actual £${summary.actual_total.toFixed(2)} | At risk ${atRisk} | Over ${over}`;
+
+        rowsEl.innerHTML = categories.map(c => `
+            <tr style="border-bottom:1px solid #f3f4f6;">
+                <td style="padding:0.5rem 0.25rem;">${c.category}</td>
+                <td style="padding:0.5rem 0.25rem;">£${Number(c.target).toFixed(2)}</td>
+                <td style="padding:0.5rem 0.25rem;">£${Number(c.actual).toFixed(2)}</td>
+                <td style="padding:0.5rem 0.25rem;">${Number(c.percent_used).toFixed(1)}%</td>
+                <td style="padding:0.5rem 0.25rem;">${statusBadge(c.status)}</td>
+            </tr>
+        `).join('');
+    } catch (error) {
+        console.error('Failed to load budget health:', error);
+        rowsEl.innerHTML = '<tr><td colspan="5" style="padding:1rem;color:#ef4444;">Failed to load budget health.</td></tr>';
+        summaryEl.textContent = 'Budget health unavailable';
+    }
+}
+
+async function loadBudgetTrend() {
+    const chartDiv = document.getElementById('budgetTrendChart');
+    if (!chartDiv) return;
+
+    try {
+        const data = await api.getBudgetTrend(6);
+        const months = data?.months || [];
+        const series = data?.series || [];
+
+        if (months.length === 0 || series.length === 0) {
+            chartDiv.innerHTML = '<p style="text-align:center;color:#6b7280;padding:2rem">No budget trend data yet</p>';
+            return;
+        }
+
+        const totalsByMonth = {};
+        for (const month of months) {
+            totalsByMonth[month] = { target: 0, actual: 0 };
+        }
+        for (const point of series) {
+            if (!totalsByMonth[point.month]) continue;
+            totalsByMonth[point.month].target += Number(point.target || 0);
+            totalsByMonth[point.month].actual += Number(point.actual || 0);
+        }
+
+        Plotly.newPlot('budgetTrendChart', [
+            {
+                x: months,
+                y: months.map(m => Number(totalsByMonth[m].target.toFixed(2))),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Budget Target',
+                line: { color: '#2563eb', width: 3, dash: 'dot' },
+                marker: { size: 7 }
+            },
+            {
+                x: months,
+                y: months.map(m => Number(totalsByMonth[m].actual.toFixed(2))),
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Actual Spend',
+                line: { color: '#ef4444', width: 3 },
+                marker: { size: 7 },
+                fill: 'tozeroy',
+                fillcolor: 'rgba(239,68,68,0.08)'
+            }
+        ], {
+            height: 320,
+            margin: { t: 20, b: 50, l: 60, r: 20 },
+            xaxis: { title: 'Month' },
+            yaxis: { title: 'Amount (\u00a3)', tickprefix: '\u00a3' },
+            legend: { orientation: 'h', y: -0.25 }
+        }, { responsive: true });
+    } catch (error) {
+        console.error('Failed to load budget trend:', error);
+        chartDiv.innerHTML = '<p style="text-align:center;color:#ef4444;padding:2rem">Failed to load budget trend</p>';
+    }
 }
 
 // ---------------------------------------------------------------------------

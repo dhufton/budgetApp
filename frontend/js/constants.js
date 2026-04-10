@@ -21,6 +21,8 @@ const ENDPOINTS = {
     budgetComparison:  '/api/budget-comparison',
     accounts:          '/api/accounts',
     account:           (id)     => `/api/accounts/${encodeURIComponent(id)}`,
+    budgetHealth:      '/api/budget-health',
+    budgetTrend:       '/api/budget-trend',
     config:            '/api/config',
     categorise:        '/api/categorise',
     insights:          '/api/insights',
