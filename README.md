@@ -67,8 +67,11 @@ Use the contract SQL and docs as source of truth:
 - `DELETE /api/categories/{category}`
 - `GET /api/budget-targets`
 - `POST /api/budget-targets`
+- `PATCH /api/budget-targets/{category}`
 - `DELETE /api/budget-targets/{category}`
 - `GET /api/budget-comparison`
+- `GET /api/budget-health`
+- `GET /api/budget-trend`
 - `GET /api/insights`
 - `GET /api/budget-suggestions`
 - `POST /api/categorise`

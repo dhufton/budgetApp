@@ -298,33 +298,69 @@ function renderBudgetTargets() {
         container.innerHTML = '<p style="color:#9ca3af; font-size:0.875rem; padding:0.5rem 0;">No budget targets set yet. Add one above!</p>';
         return;
     }
-    container.innerHTML = currentBudgets.map(budget => `
+    container.innerHTML = currentBudgets.map(budget => {
+        const safeId = escId(budget.category);
+        const threshold = Number.isFinite(parseFloat(budget.threshold_percent))
+            ? parseFloat(budget.threshold_percent)
+            : 80;
+        return `
         <div class="budget-item">
-            <div class="budget-info">
+            <div class="budget-info" style="flex:1;">
                 <span class="budget-category">${escHtml(budget.category)}</span>
                 <span class="budget-amount">£${parseFloat(budget.target_amount).toFixed(0)}/mo</span>
+                <span style="font-size:0.75rem;color:#6b7280;">Alert at ${threshold.toFixed(0)}%</span>
+            </div>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                <input id="target-${safeId}" type="number" min="0" step="0.01" value="${parseFloat(budget.target_amount).toFixed(2)}" style="width:100px; padding:0.35rem; border:1px solid #d1d5db; border-radius:0.375rem; font-size:0.75rem;" title="Monthly target">
+                <input id="threshold-${safeId}" type="number" min="1" max="100" step="1" value="${threshold.toFixed(0)}" style="width:85px; padding:0.35rem; border:1px solid #d1d5db; border-radius:0.375rem; font-size:0.75rem;" title="Alert threshold percent">
+                <button onclick="updateBudgetTargetInline('${escAttr(budget.category)}')" style="padding:0.35rem 0.5rem; border:1px solid #d1d5db; border-radius:0.375rem; background:#fff; font-size:0.75rem; cursor:pointer;">Save</button>
             </div>
             <button class="btn-delete" onclick="deleteBudgetTarget('${escAttr(budget.category)}')">Remove</button>
-        </div>`).join('');
+        </div>`;
+    }).join('');
 }
 
 async function setBudgetTarget() {
     const category = document.getElementById('budgetCategory').value;
     const amount   = parseFloat(document.getElementById('budgetAmount').value);
+    const threshold = parseFloat(document.getElementById('budgetThreshold').value);
 
-    if (!category || isNaN(amount) || amount <= 0) {
-        document.getElementById('budgetStatus').textContent = 'Please enter a valid category and amount.';
+    if (!category || isNaN(amount) || amount <= 0 || isNaN(threshold) || threshold < 1 || threshold > 100) {
+        document.getElementById('budgetStatus').textContent = 'Please enter a valid category, amount, and threshold (1-100).';
         return;
     }
 
     try {
-        await api.setBudgetTarget(category, amount);
+        await api.setBudgetTarget(category, amount, threshold);
         document.getElementById('budgetAmount').value = '';
+        document.getElementById('budgetThreshold').value = '80';
         document.getElementById('budgetStatus').textContent = '';
         await loadBudgetTargets();
     } catch (error) {
         console.error('Failed to set budget target:', error);
         document.getElementById('budgetStatus').textContent = 'Failed to save budget target.';
+    }
+}
+
+async function updateBudgetTargetInline(category) {
+    const safeId = escId(category);
+    const amount = parseFloat(document.getElementById(`target-${safeId}`)?.value);
+    const threshold = parseFloat(document.getElementById(`threshold-${safeId}`)?.value);
+
+    if (isNaN(amount) || amount <= 0 || isNaN(threshold) || threshold < 1 || threshold > 100) {
+        alert('Please enter a valid target and threshold (1-100).');
+        return;
+    }
+
+    try {
+        await api.updateBudgetTarget(category, {
+            target_amount: amount,
+            threshold_percent: threshold,
+        });
+        await loadBudgetTargets();
+    } catch (error) {
+        console.error('Failed to update budget target:', error);
+        alert('Failed to update budget target: ' + error.message);
     }
 }
 
