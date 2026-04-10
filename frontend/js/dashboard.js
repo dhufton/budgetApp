@@ -227,6 +227,62 @@ function formatReviewDate(value) {
     return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+function formatReviewTimestamp(value) {
+    if (!value) return '-';
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return value;
+    return dt.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+}
+
+function formatReviewTypeLabel(reviewType) {
+    if (reviewType === 'monthly_closeout') return 'Monthly closeout review';
+    if (reviewType === 'upload_snapshot') return 'Upload snapshot review';
+    return 'Review';
+}
+
+function buildReviewChangeItems(summary) {
+    const items = [];
+    const flags = summary.flags || [];
+    const categoryChanges = summary.category_changes_vs_previous || [];
+    const budgetVariance = summary.budget_variance || [];
+
+    for (const flag of flags) {
+        const category = String(flag.category || 'Uncategorized');
+        const categoryLabel = category.toLowerCase();
+
+        if (flag.type === 'spike_vs_previous') {
+            const change = categoryChanges.find((c) => c.category === category);
+            const deltaPct = Number(change?.delta_pct || 0);
+            if (deltaPct > 0) {
+                items.push(`${category}: up ${deltaPct.toFixed(1)}% vs previous period`);
+            } else {
+                items.push(`Increase in ${categoryLabel} spending`);
+            }
+            continue;
+        }
+
+        if (flag.type === 'over_budget') {
+            const varianceRow = budgetVariance.find((b) => b.category === category);
+            const overspend = Math.max(0, Number((varianceRow?.actual || 0)) - Number((varianceRow?.target || 0)));
+            if (overspend > 0) {
+                items.push(`${category}: over budget by ${formatCurrency(overspend)}`);
+            } else {
+                items.push(`Over budget in ${categoryLabel}`);
+            }
+            continue;
+        }
+    }
+
+    return [...new Set(items)];
+}
+
 function renderReviewSummary(review) {
     const statusEl = document.getElementById('reviewStatus');
     const periodEl = document.getElementById('reviewPeriod');
@@ -244,22 +300,37 @@ function renderReviewSummary(review) {
         incomeEl.textContent = formatCurrency(0);
         netEl.textContent = formatCurrency(0);
         merchantsEl.textContent = '-';
-        flagsEl.textContent = 'None';
+        flagsEl.textContent = 'No notable changes.';
         return;
     }
 
     const summary = review.summary || {};
     const totals = summary.totals || {};
     const merchants = summary.top_merchants || [];
-    const flags = summary.flags || [];
+    const changeItems = buildReviewChangeItems(summary);
 
-    statusEl.textContent = `Latest ${review.review_type || 'review'} generated on ${new Date(review.created_at).toLocaleString('en-GB')}`;
+    statusEl.textContent = `Latest ${formatReviewTypeLabel(review.review_type)} generated on ${formatReviewTimestamp(review.created_at)}`;
     periodEl.textContent = `${formatReviewDate(review.period_start)} to ${formatReviewDate(review.period_end)}`;
     spentEl.textContent = formatCurrency(totals.spent);
     incomeEl.textContent = formatCurrency(totals.income);
     netEl.textContent = formatCurrency(totals.net);
-    merchantsEl.textContent = merchants.length ? merchants.map(m => `${m.merchant} (${formatCurrency(m.amount)})`).join(', ') : '-';
-    flagsEl.textContent = flags.length ? flags.map(f => `${f.type} (${f.category})`).join(', ') : 'None';
+    if (merchants.length) {
+        merchantsEl.innerHTML = `<ul style="margin:0; padding-left:1rem;">${
+            merchants
+                .slice(0, 5)
+                .map((m) => `<li>${m.merchant}: ${formatCurrency(m.amount)}</li>`)
+                .join('')
+        }</ul>`;
+    } else {
+        merchantsEl.textContent = '-';
+    }
+    if (changeItems.length) {
+        flagsEl.innerHTML = `<ul style="margin:0; padding-left:1rem;">${
+            changeItems.map((item) => `<li>${item}</li>`).join('')
+        }</ul>`;
+    } else {
+        flagsEl.textContent = 'No notable changes.';
+    }
 }
 
 function renderReviewHistory(reviews) {
