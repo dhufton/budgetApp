@@ -23,7 +23,7 @@ _CADENCE_DAYS = {
 
 class RecomputeRequest(BaseModel):
     lookback_months: int = Field(default=12, ge=1, le=36)
-    min_occurrences: int = Field(default=3, ge=2, le=24)
+    min_occurrences: int = Field(default=2, ge=2, le=24)
     account_id: str = "all"
 
 
@@ -68,14 +68,37 @@ def _clean_display_name(description: str) -> str:
         cleaned,
         flags=re.IGNORECASE,
     )
+    cleaned = re.sub(r"^(from|to)\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(chase|jpmcb|jpmorgan|jpmcb)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*-\s*[0-9]{2,}.*$", "", cleaned)
+    cleaned = re.sub(r"\bref(erence)?\b.*$", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b[0-9]{4,}\b", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -")
     return cleaned or first_line or "Unknown"
 
 
 def _merchant_key(display_name: str) -> str:
-    key = re.sub(r"[^a-zA-Z0-9 ]", "", display_name.lower())
+    key = re.sub(r"[^a-zA-Z0-9 ]", " ", display_name.lower())
+    key = re.sub(r"\b(from|to|payment|purchase|direct|debit|standing|order)\b", " ", key)
+    key = re.sub(r"\b[0-9]{2,}\b", " ", key)
     key = re.sub(r"\s+", " ", key).strip()
     return key[:120] or "unknown"
+
+
+def _default_account_id(user_id: str) -> Optional[str]:
+    rows = (
+        supabase_admin.table("accounts")
+        .select("id,is_default,created_at")
+        .eq("user_id", user_id)
+        .order("is_default", desc=True)
+        .order("created_at", desc=False)
+        .limit(5)
+        .execute()
+    ).data or []
+    if not rows:
+        return None
+    default_row = next((row for row in rows if row.get("is_default")), None)
+    return (default_row or rows[0]).get("id")
 
 
 def _classify_cadence(sorted_dates: List[date]) -> Tuple[str, Optional[int]]:
@@ -155,7 +178,17 @@ async def recompute_recurring(request: RecomputeRequest, user_id: str = Depends(
     account_scope = _validate_account_scope(user_id, request.account_id)
 
     txns = _fetch_transactions_for_recurrence(user_id, account_scope, request.lookback_months)
-    txns = [t for t in txns if t.get("account_id") and t.get("category") != "Transfer"]
+    fallback_account_id = _default_account_id(user_id)
+
+    normalized = []
+    for txn in txns:
+        if txn.get("category") == "Transfer":
+            continue
+        account_id = txn.get("account_id") or fallback_account_id
+        if not account_id:
+            continue
+        normalized.append({**txn, "account_id": account_id})
+    txns = normalized
 
     grouped: Dict[Tuple[str, str], List[dict]] = defaultdict(list)
     for txn in txns:
