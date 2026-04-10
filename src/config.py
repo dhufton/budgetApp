@@ -1,34 +1,70 @@
-# budgetApp/src/config.py
+"""Shared categorisation configuration used by ingestion + API routes."""
 
-# Monthly Budget Targets (in GBP)
-BUDGET_LIMITS = {
-    "Rent": 1900.00,
-    "Groceries": 400.00,
-    "Dining Out": 200.00,
-    "Transport": 150.00,
-    "Shopping": 300.00,
-    "Football": 100.00,
-    "Utilities": 250.00,
-    "Savings": 500.00
-}
+BUILTIN_CATEGORIES = [
+    "Bills",
+    "Entertainment",
+    "Food",
+    "Savings",
+    "Shopping",
+    "Transport",
+]
 
-# Categorization Keywords
+# Built-in keyword rules used for deterministic pre-categorisation.
 CATEGORY_RULES = {
-    "Rent": ["Stein McBride", "ManillaSt"],
-    "Groceries": ["Tesco", "Sainsbury", "Ocado", "Waitrose", "Lidl", "Aldi", "Marks & Spencer", "Tian Tian"],
-    "Dining Out": ["Nandos", "Pizza Hut", "McDonald's", "Uber Eats", "Pret", "Coffee", "Tortilla",
-                   "Origin Coffee", "Neama", "Burger King", "Wingstop", "Borough Market", "Humble Crumble",
-                   "Deliveroo", "Papa John", "Coco Di Mama", "Honest Burger", "Zizi"],
-    "Leisure": ["Nottingham Forest", "Forest", "Golf", "N1 London", "Fellows Morton"],
-    "Health": ["Boots", "Aesop", "Lush", "Skin + Me", "Adam Grooming"],
-    "Coffee": ["WatchHouse", "Origin Coffee", "Nero"],
-    "Transport": ["TFL", "Uber", "Trainline", "Shell", "BP"],
-    "Shopping": ["Amazon", "End.", "Fortnum", "Apple", "Skin + Me", "Kitchen Prov", "Steam Games",
-                 "TK Maxx", "Søstrene", "Co-op", "M&S", "Electronic Arts", "Whittard of Chelsea", "Ralph Lauren",
-                 "Harrods", "Cos", "Ikea", "Instalement Plan"],
-    "Utilities": ["British Gas", "Thames Water", "Council Tax", "Hyperoptic", "O2", "Sky"],
-    "Savings": ["Chase Saver", "Round Up"],
-    "Credit Cards": ["American Express", "To John Lewis", "NewDay"],
-    "Travel": ["EUR", "USD", "World Duty Free", "Airbnb", "Ryanair", "Easyjet", "British Airways", "Expedia"],
-    "Ignore": ["3305 JPMCB", "Hannah Bince", "Adelle Gamble", "Credit Payments", "Internal Transfer", "Refund", "Payment"]
+    "Bills": [
+        "British Gas",
+        "Thames Water",
+        "Council Tax",
+        "Hyperoptic",
+        "O2",
+        "Sky",
+        "American Express",
+        "Amex",
+        "Rent",
+    ],
+    "Entertainment": [
+        "Netflix",
+        "Spotify",
+        "Steam",
+        "Cinema",
+        "Apple",
+        "Microsoft",
+        "Golf",
+    ],
+    "Food": [
+        "Tesco",
+        "Sainsbury",
+        "Ocado",
+        "Waitrose",
+        "Lidl",
+        "Aldi",
+        "Deliveroo",
+        "Uber Eats",
+        "Pret",
+        "Nandos",
+    ],
+    "Savings": [
+        "Chase Saver",
+        "Round Up",
+        "ISA",
+        "Pension",
+        "Savings",
+    ],
+    "Shopping": [
+        "Amazon",
+        "ASOS",
+        "Ebay",
+        "John Lewis",
+        "TK Maxx",
+        "Instalment Plan",
+        "Payment Received",
+    ],
+    "Transport": [
+        "TFL",
+        "Trainline",
+        "Uber",
+        "Shell",
+        "BP",
+        "National Rail",
+    ],
 }
