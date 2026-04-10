@@ -15,6 +15,7 @@ from api.dependencies import get_groq_service
 from api.groq_service import GroqService
 from api.routes.categories import apply_user_keywords
 from api.transfer_rules import apply_transfer_classification
+from api.review_service import get_or_create_review
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ async def upload_statement(
         transactions_to_insert = apply_transfer_classification(transactions_to_insert)
 
         categorised_count = 0
+        created_review = None
         if transactions_to_insert:
             insert_result = supabase_admin.table("transactions").insert(transactions_to_insert).execute()
             saved_transactions = insert_result.data or []
@@ -131,12 +133,37 @@ async def upload_statement(
                 categorised_count = pre_categorised
                 logger.info("[UPLOAD] All transactions categorised - no Groq call needed")
 
+            # Best-effort upload snapshot review generation for this statement period.
+            try:
+                txn_dates = []
+                for txn in transactions_to_insert:
+                    txn_date = txn.get("date")
+                    if not txn_date:
+                        continue
+                    parsed = datetime.strptime(str(txn_date), "%Y-%m-%d").date()
+                    txn_dates.append(parsed)
+                if txn_dates:
+                    period_start = min(txn_dates)
+                    period_end = max(txn_dates)
+                    created_review = get_or_create_review(
+                        user_id=user_id,
+                        review_type="upload_snapshot",
+                        triggered_by="upload",
+                        period_start=period_start,
+                        period_end=period_end,
+                        account_id=account_id,
+                        statement_id=statement_id,
+                    )
+            except Exception as review_error:
+                logger.warning(f"[UPLOAD] review generation failed: {review_error!r}")
+
         return {
             "success":      True,
             "message":      f"Uploaded {file.filename}",
             "transactions": len(df),
             "categorised":  categorised_count,
             "storage_path": saved_path,
+            "review_id": created_review.get("id") if created_review else None,
         }
 
     except HTTPException:

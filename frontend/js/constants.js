@@ -27,4 +27,8 @@ const ENDPOINTS = {
     categorise:        '/api/categorise',
     insights:          '/api/insights',
     budgetSuggestions: '/api/budget-suggestions',
+    reviewsLatest:     '/api/reviews/latest',
+    reviewsHistory:    '/api/reviews/history',
+    reviewsGenerate:   '/api/reviews/generate',
+    reviewsGenerateMonthly: '/api/reviews/generate-monthly',
 };

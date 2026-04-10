@@ -160,6 +160,25 @@
             </div>
         </div>
 
+        <!-- Monthly review -->
+        <div class="chart-card" style="margin-bottom: 1.5rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; gap:0.5rem; flex-wrap:wrap;">
+                <h3 style="margin:0;">Monthly Review</h3>
+                <button id="generateMonthlyReviewBtn" class="btn btn-secondary" style="width:auto; padding:0.45rem 0.8rem;">Generate Previous Month Review</button>
+            </div>
+            <div id="reviewStatus" style="font-size:0.875rem; color:#6b7280; margin-bottom:0.5rem;">Loading review...</div>
+            <div id="reviewSummary" style="font-size:0.9rem; color:#1f2937;">
+                <p style="margin:0.2rem 0;"><strong>Period:</strong> <span id="reviewPeriod">-</span></p>
+                <p style="margin:0.2rem 0;"><strong>Spent:</strong> <span id="reviewSpent">£0.00</span> | <strong>Income:</strong> <span id="reviewIncome">£0.00</span> | <strong>Net:</strong> <span id="reviewNet">£0.00</span></p>
+                <p style="margin:0.2rem 0;"><strong>Top Merchants:</strong> <span id="reviewTopMerchants">-</span></p>
+                <p style="margin:0.2rem 0;"><strong>Flags:</strong> <span id="reviewFlags">None</span></p>
+            </div>
+            <div style="margin-top:0.8rem;">
+                <h4 style="font-size:0.9rem; margin:0 0 0.4rem 0;">Recent Reviews</h4>
+                <div id="reviewHistory" style="font-size:0.85rem; color:#4b5563;">No reviews yet.</div>
+            </div>
+        </div>
+
         <!-- Upload -->
         <div class="upload-section">
             <h2>Upload Bank Statement</h2>

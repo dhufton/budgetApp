@@ -366,6 +366,59 @@ const api = {
         }
         return response.json();
     },
+
+    async getLatestReview(accountId = 'all', reviewType = null) {
+        const params = new URLSearchParams();
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        if (reviewType) params.set('review_type', reviewType);
+        const response = await authFetch(`${ENDPOINTS.reviewsLatest}${params.toString() ? `?${params.toString()}` : ''}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch latest review');
+        }
+        return response.json();
+    },
+
+    async getReviewHistory({ accountId = 'all', reviewType = null, limit = 20 } = {}) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        if (reviewType) params.set('review_type', reviewType);
+        const response = await authFetch(`${ENDPOINTS.reviewsHistory}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch review history');
+        }
+        return response.json();
+    },
+
+    async generateReview(payload) {
+        const response = await authFetch(ENDPOINTS.reviewsGenerate, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to generate review');
+        }
+        return response.json();
+    },
+
+    async generateMonthlyReview(accountId = 'all') {
+        const params = new URLSearchParams();
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        const response = await authFetch(`${ENDPOINTS.reviewsGenerateMonthly}${params.toString() ? `?${params.toString()}` : ''}`, {
+            method: 'POST',
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to generate monthly review');
+        }
+        return response.json();
+    },
 };
 
 // Explicitly expose API on window to avoid any cross-script global binding ambiguity.
