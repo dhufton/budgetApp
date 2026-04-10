@@ -26,7 +26,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         bindEvent('uploadBtn',         'click',  uploadFiles);
         bindEvent('fixCategoriesBtn',  'click',  fixUncategorised);
         bindEvent('generateMonthlyReviewBtn', 'click', generateMonthlyReview);
-        bindEvent('dismissInsightsBtn','click',  () => document.getElementById('insightsCard')?.classList.add('hidden'));
         bindEvent('searchInput',       'input',  () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('categoryFilter',    'change', () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('accountFilter',     'change', async (e) => {
@@ -210,26 +209,10 @@ async function loadDashboard() {
             await loadBudgetTrend();
             await loadReviews();
             sortTable('date');
-            loadInsights();
         }
     } catch (error) {
         console.error('Failed to load dashboard:', error);
         showErrorState(error.message);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// AI Insights
-// ---------------------------------------------------------------------------
-async function loadInsights() {
-    const card = document.getElementById('insightsCard');
-    const text = document.getElementById('insightsText');
-    if (!card || !text) return;
-    try {
-        const data = await api.getInsights(currentAccountId);
-        if (data?.insight) { text.textContent = data.insight; card.classList.remove('hidden'); }
-    } catch (error) {
-        console.warn('Could not load insights:', error);
     }
 }
 
