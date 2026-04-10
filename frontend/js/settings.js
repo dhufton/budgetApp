@@ -185,7 +185,7 @@ async function recomputeRecurringRules() {
     try {
         const result = await api.recomputeRecurring({
             lookbackMonths: 12,
-            minOccurrences: 3,
+            minOccurrences: 2,
             accountId: scope,
         });
         if (statusEl) {

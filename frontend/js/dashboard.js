@@ -26,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         bindEvent('uploadBtn',         'click',  uploadFiles);
         bindEvent('fixCategoriesBtn',  'click',  fixUncategorised);
+        bindEvent('recategoriseBtn',   'click',  recategoriseUncategorisedNow);
         bindEvent('generateMonthlyReviewBtn', 'click', generateMonthlyReview);
         bindEvent('acceptHighConfidenceBtn', 'click', acceptHighConfidenceSuggestions);
         bindEvent('approveSelectedBtn', 'click', approveSelectedSuggestions);
@@ -128,10 +129,44 @@ async function uploadFiles() {
     if (successCount > 0) {
         setTimeout(async () => {
             showLoading(true);
+            try {
+                await api.categoriseTransactions(uploadAccount);
+            } catch (error) {
+                console.error('Auto recategorise after upload failed:', error);
+            }
+            try {
+                await api.recomputeRecurring({ lookbackMonths: 12, minOccurrences: 2, accountId: uploadAccount });
+            } catch (error) {
+                console.error('Auto recurring recompute after upload failed:', error);
+            }
             await loadDashboard();
             showLoading(false);
             status.textContent = finalMessage;
         }, 1000);
+    }
+}
+
+async function recategoriseUncategorisedNow() {
+    const btn = document.getElementById('recategoriseBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Recategorising...';
+    }
+    try {
+        const result = await api.categoriseTransactions(currentAccountId);
+        const countEl = document.getElementById('uncategorizedCount');
+        if (countEl) {
+            countEl.textContent = result?.message || `Categorised ${result?.changed || 0} transactions`;
+        }
+        await loadDashboard();
+    } catch (error) {
+        console.error('Recategorise failed:', error);
+        alert(`Recategorise failed: ${error.message}`);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Recategorise Uncategorised';
+        }
     }
 }
 
@@ -473,7 +508,7 @@ async function loadAiReviewQueue() {
 }
 
 function renderSuggestionRow(item) {
-    const suggestion = item.suggestion || {};
+    const suggestion = item?.suggestion || item || {};
     const txn = item.transaction || {};
     const suggestionId = suggestion.id;
     const selectedCategory = suggestion.suggested_category || 'Uncategorized';
