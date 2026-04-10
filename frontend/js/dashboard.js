@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         bindEvent('uploadBtn',         'click',  uploadFiles);
         bindEvent('fixCategoriesBtn',  'click',  fixUncategorised);
+        bindEvent('generateMonthlyReviewBtn', 'click', generateMonthlyReview);
         bindEvent('dismissInsightsBtn','click',  () => document.getElementById('insightsCard')?.classList.add('hidden'));
         bindEvent('searchInput',       'input',  () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('categoryFilter',    'change', () => { currentPage = 1; filterAndRenderTable(); });
@@ -198,6 +199,7 @@ async function loadDashboard() {
             showEmptyState();
             await loadBudgetHealth();
             await loadBudgetTrend();
+            await loadReviews();
         } else {
             populateCategoryFilter();
             calculateMetrics();
@@ -206,6 +208,7 @@ async function loadDashboard() {
             renderCategorySpendingChart();
             await loadBudgetHealth();
             await loadBudgetTrend();
+            await loadReviews();
             sortTable('date');
             loadInsights();
         }
@@ -227,6 +230,108 @@ async function loadInsights() {
         if (data?.insight) { text.textContent = data.insight; card.classList.remove('hidden'); }
     } catch (error) {
         console.warn('Could not load insights:', error);
+    }
+}
+
+function formatCurrency(value) {
+    return `£${Number(value || 0).toFixed(2)}`;
+}
+
+function formatReviewDate(value) {
+    if (!value) return '-';
+    const date = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function renderReviewSummary(review) {
+    const statusEl = document.getElementById('reviewStatus');
+    const periodEl = document.getElementById('reviewPeriod');
+    const spentEl = document.getElementById('reviewSpent');
+    const incomeEl = document.getElementById('reviewIncome');
+    const netEl = document.getElementById('reviewNet');
+    const merchantsEl = document.getElementById('reviewTopMerchants');
+    const flagsEl = document.getElementById('reviewFlags');
+    if (!statusEl || !periodEl || !spentEl || !incomeEl || !netEl || !merchantsEl || !flagsEl) return;
+
+    if (!review) {
+        statusEl.textContent = 'No reviews found for this account scope.';
+        periodEl.textContent = '-';
+        spentEl.textContent = formatCurrency(0);
+        incomeEl.textContent = formatCurrency(0);
+        netEl.textContent = formatCurrency(0);
+        merchantsEl.textContent = '-';
+        flagsEl.textContent = 'None';
+        return;
+    }
+
+    const summary = review.summary || {};
+    const totals = summary.totals || {};
+    const merchants = summary.top_merchants || [];
+    const flags = summary.flags || [];
+
+    statusEl.textContent = `Latest ${review.review_type || 'review'} generated on ${new Date(review.created_at).toLocaleString('en-GB')}`;
+    periodEl.textContent = `${formatReviewDate(review.period_start)} to ${formatReviewDate(review.period_end)}`;
+    spentEl.textContent = formatCurrency(totals.spent);
+    incomeEl.textContent = formatCurrency(totals.income);
+    netEl.textContent = formatCurrency(totals.net);
+    merchantsEl.textContent = merchants.length ? merchants.map(m => `${m.merchant} (${formatCurrency(m.amount)})`).join(', ') : '-';
+    flagsEl.textContent = flags.length ? flags.map(f => `${f.type} (${f.category})`).join(', ') : 'None';
+}
+
+function renderReviewHistory(reviews) {
+    const historyEl = document.getElementById('reviewHistory');
+    if (!historyEl) return;
+    if (!reviews || reviews.length === 0) {
+        historyEl.textContent = 'No reviews yet.';
+        return;
+    }
+
+    historyEl.innerHTML = reviews.slice(0, 6).map((review) => {
+        const totals = review.summary?.totals || {};
+        const label = review.review_type === 'monthly_closeout' ? 'Monthly' : 'Upload';
+        return `
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f3f4f6; padding:0.35rem 0;">
+                <span>${label} | ${formatReviewDate(review.period_start)} - ${formatReviewDate(review.period_end)}</span>
+                <span style="font-weight:600;">${formatCurrency(totals.spent)}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadReviews() {
+    const statusEl = document.getElementById('reviewStatus');
+    if (statusEl) statusEl.textContent = 'Loading review...';
+    try {
+        const [latestData, historyData] = await Promise.all([
+            api.getLatestReview(currentAccountId),
+            api.getReviewHistory({ accountId: currentAccountId, limit: 6 }),
+        ]);
+        renderReviewSummary(latestData?.review || null);
+        renderReviewHistory(historyData?.reviews || []);
+    } catch (error) {
+        console.error('Failed to load reviews:', error);
+        if (statusEl) statusEl.textContent = 'Review data unavailable';
+        renderReviewHistory([]);
+    }
+}
+
+async function generateMonthlyReview() {
+    const btn = document.getElementById('generateMonthlyReviewBtn');
+    const statusEl = document.getElementById('reviewStatus');
+    if (!btn) return;
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    try {
+        await api.generateMonthlyReview(currentAccountId);
+        if (statusEl) statusEl.textContent = 'Monthly review generated';
+        await loadReviews();
+    } catch (error) {
+        console.error('Failed to generate monthly review:', error);
+        if (statusEl) statusEl.textContent = `Failed to generate review: ${error.message}`;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Previous Month Review';
     }
 }
 
@@ -296,6 +401,8 @@ function showLoading(loading) {
     if (budgetHealthRows) budgetHealthRows.innerHTML = `<tr><td colspan="5" style="padding:1rem;color:#6b7280;">Loading budget health...</td></tr>`;
     const budgetHealthSummary = document.getElementById('budgetHealthSummary');
     if (budgetHealthSummary) budgetHealthSummary.textContent = 'Loading...';
+    const reviewStatus = document.getElementById('reviewStatus');
+    if (reviewStatus) reviewStatus.textContent = 'Loading review...';
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
@@ -313,6 +420,10 @@ function showEmptyState() {
     if (budgetHealthRows) budgetHealthRows.innerHTML = `<tr><td colspan="5" style="padding:1rem;color:#6b7280;">No budget data yet.</td></tr>`;
     const budgetHealthSummary = document.getElementById('budgetHealthSummary');
     if (budgetHealthSummary) budgetHealthSummary.textContent = 'No budget data';
+    const reviewStatus = document.getElementById('reviewStatus');
+    if (reviewStatus) reviewStatus.textContent = 'No review yet';
+    renderReviewSummary(null);
+    renderReviewHistory([]);
     document.getElementById('pageIndicator').textContent = '';
     document.getElementById('transactionCount').textContent = '';
 }
