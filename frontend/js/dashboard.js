@@ -903,23 +903,37 @@ async function loadRecurringUpcoming() {
         }
 
         summaryEl.textContent = `${items.length} due in next 30 days`;
-        rowsEl.innerHTML = items.map((item) => {
-            const confidence = Number(item.confidence || 0);
-            const confidenceColor = confidence >= 85 ? '#166534' : (confidence >= 60 ? '#92400e' : '#991b1b');
-            return `
+        rowsEl.innerHTML = items.map((item) => `
                 <tr style="border-bottom:1px solid #f3f4f6;">
                     <td style="padding:0.45rem 0.25rem;">${escapeHtml(item.display_name || '-')}</td>
                     <td style="padding:0.45rem 0.25rem;">${formatIsoDateForUi(item.expected_date)}</td>
                     <td style="padding:0.45rem 0.25rem;">£${Number(item.expected_amount || 0).toFixed(2)}</td>
                     <td style="padding:0.45rem 0.25rem;">${escapeHtml(item.category || 'Uncategorized')}</td>
-                    <td style="padding:0.45rem 0.25rem; color:${confidenceColor}; font-weight:600;">${confidence.toFixed(1)}%</td>
+                    <td style="padding:0.45rem 0.25rem; text-align:right;">
+                        <button
+                            title="Remove from recurring list"
+                            aria-label="Remove recurring rule"
+                            onclick="ignoreRecurringRule('${escapeHtml(item.rule_id || '')}')"
+                            style="border:1px solid #d1d5db; background:#fff; color:#ef4444; width:1.8rem; height:1.8rem; border-radius:999px; font-weight:700; cursor:pointer;"
+                        >×</button>
+                    </td>
                 </tr>
-            `;
-        }).join('');
+            `).join('');
     } catch (error) {
         console.error('Failed to load recurring upcoming charges:', error);
         rowsEl.innerHTML = '<tr><td colspan="5" style="padding:0.7rem; color:#ef4444;">Failed to load recurring charges.</td></tr>';
         summaryEl.textContent = 'Recurring data unavailable';
+    }
+}
+
+async function ignoreRecurringRule(ruleId) {
+    if (!ruleId) return;
+    try {
+        await api.updateRecurringRule(ruleId, { status: 'ignored' });
+        await loadRecurringUpcoming();
+    } catch (error) {
+        console.error('Failed to ignore recurring rule:', error);
+        alert(`Failed to remove recurring rule: ${error.message}`);
     }
 }
 
