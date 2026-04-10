@@ -367,6 +367,83 @@ const api = {
         return response.json();
     },
 
+    async categoriseSuggest(accountId = 'all', threshold = 85) {
+        const response = await authFetch(ENDPOINTS.categoriseSuggest, {
+            method: 'POST',
+            body: JSON.stringify({ account_id: accountId, threshold }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to generate categorisation suggestions');
+        }
+        return response.json();
+    },
+
+    async getCategoriseReviewQueue(accountId = 'all', limit = 100) {
+        const params = new URLSearchParams({ limit: String(limit) });
+        if (accountId && accountId !== 'all') params.set('account_id', accountId);
+        const response = await authFetch(`${ENDPOINTS.categoriseReviewQueue}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch categorisation review queue');
+        }
+        return response.json();
+    },
+
+    async categoriseApprove(suggestionIds) {
+        const response = await authFetch(ENDPOINTS.categoriseApprove, {
+            method: 'POST',
+            body: JSON.stringify({ suggestion_ids: suggestionIds }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to approve suggestions');
+        }
+        return response.json();
+    },
+
+    async categoriseOverride(suggestionId, finalCategory) {
+        const response = await authFetch(ENDPOINTS.categoriseOverride, {
+            method: 'POST',
+            body: JSON.stringify({ suggestion_id: suggestionId, final_category: finalCategory }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to override suggestion');
+        }
+        return response.json();
+    },
+
+    async categoriseReject(suggestionIds) {
+        const response = await authFetch(ENDPOINTS.categoriseReject, {
+            method: 'POST',
+            body: JSON.stringify({ suggestion_ids: suggestionIds }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to reject suggestions');
+        }
+        return response.json();
+    },
+
+    async categoriseAcceptHighConfidence(accountId = 'all', threshold = 85) {
+        const response = await authFetch(ENDPOINTS.categoriseAcceptHighConfidence, {
+            method: 'POST',
+            body: JSON.stringify({ account_id: accountId, threshold }),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to accept high confidence suggestions');
+        }
+        return response.json();
+    },
+
     async getLatestReview(accountId = 'all', reviewType = null) {
         const params = new URLSearchParams();
         if (accountId && accountId !== 'all') params.set('account_id', accountId);

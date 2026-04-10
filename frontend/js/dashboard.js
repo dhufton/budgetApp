@@ -12,6 +12,7 @@ let currentPage = 1;
 let pageSize = 50;
 let isLoading = false;
 let currentAccountId = 'all';
+let pendingSuggestionItems = [];
 
 // ---------------------------------------------------------------------------
 // Initialise
@@ -26,6 +27,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         bindEvent('uploadBtn',         'click',  uploadFiles);
         bindEvent('fixCategoriesBtn',  'click',  fixUncategorised);
         bindEvent('generateMonthlyReviewBtn', 'click', generateMonthlyReview);
+        bindEvent('acceptHighConfidenceBtn', 'click', acceptHighConfidenceSuggestions);
+        bindEvent('approveSelectedBtn', 'click', approveSelectedSuggestions);
+        bindEvent('rejectSelectedBtn', 'click', rejectSelectedSuggestions);
+        bindEvent('selectAllSuggestions', 'change', toggleAllSuggestions);
         bindEvent('searchInput',       'input',  () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('categoryFilter',    'change', () => { currentPage = 1; filterAndRenderTable(); });
         bindEvent('accountFilter',     'change', async (e) => {
@@ -52,6 +57,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (e.target.tagName === 'SELECT' && e.target.dataset.transactionId) {
                 await updateCategory(e.target.dataset.transactionId, e.target.value);
             }
+        });
+        document.getElementById('aiReviewRows')?.addEventListener('click', async (e) => {
+            const btn = e.target.closest('button[data-action=\"override\"]');
+            if (!btn) return;
+            const suggestionId = btn.dataset.suggestionId;
+            const select = document.getElementById(`override-${suggestionId}`);
+            if (!select) return;
+            await overrideSuggestion(suggestionId, select.value, btn);
         });
 
         showLoading(true);
@@ -189,7 +202,7 @@ async function loadDashboard() {
             document.getElementById('uncategorizedCount').textContent =
                 `${uncategorizedCount} transaction${uncategorizedCount !== 1 ? 's' : ''} need categorisation`;
             const btn = document.getElementById('fixCategoriesBtn');
-            if (btn) { btn.disabled = false; btn.textContent = 'Fix with AI'; btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed'); }
+            if (btn) { btn.disabled = false; btn.textContent = 'Generate AI Suggestions'; btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed'); }
         } else {
             document.getElementById('uncategorizedAlert').classList.add('hidden');
         }
@@ -199,6 +212,7 @@ async function loadDashboard() {
             await loadBudgetHealth();
             await loadBudgetTrend();
             await loadReviews();
+            await loadAiReviewQueue();
         } else {
             populateCategoryFilter();
             calculateMetrics();
@@ -208,6 +222,7 @@ async function loadDashboard() {
             await loadBudgetHealth();
             await loadBudgetTrend();
             await loadReviews();
+            await loadAiReviewQueue();
             sortTable('date');
         }
     } catch (error) {
@@ -395,27 +410,159 @@ async function generateMonthlyReview() {
 async function fixUncategorised() {
     const btn = document.getElementById('fixCategoriesBtn');
     const countEl = document.getElementById('uncategorizedCount');
+    if (!btn || !countEl) return;
+
     btn.disabled = true;
-    btn.textContent = 'Categorising...';
+    btn.textContent = 'Generating suggestions...';
     btn.classList.add('opacity-75', 'cursor-not-allowed');
     try {
-        const result = await api.categoriseTransactions(currentAccountId);
-        if (result?.changed > 0) {
-            countEl.textContent = `${result.changed} transaction${result.changed !== 1 ? 's' : ''} categorised!`;
-            btn.classList.add('hidden');
-            setTimeout(async () => { showLoading(true); await loadDashboard(); showLoading(false); }, 1500);
-        } else {
-            countEl.textContent = 'No new categories found - try manually categorising remaining transactions';
-            btn.disabled = false;
-            btn.textContent = 'Fix with AI';
-            btn.classList.remove('opacity-75', 'cursor-not-allowed');
-        }
+        const result = await api.categoriseSuggest(currentAccountId, 85);
+        if (!result) throw new Error('No response from categorisation service');
+
+        countEl.textContent =
+            `AI run: ${result.uncategorised_total} uncategorised, ${result.auto_applied} auto-applied, ${result.needs_review} need review`;
+        await loadDashboard();
     } catch (error) {
         console.error('Categorisation failed:', error);
-        countEl.textContent = 'Categorisation failed - please try again';
+        countEl.textContent = `Categorisation failed: ${error.message}`;
+    } finally {
         btn.disabled = false;
-        btn.textContent = 'Fix with AI';
+        btn.textContent = 'Generate AI Suggestions';
         btn.classList.remove('opacity-75', 'cursor-not-allowed');
+    }
+}
+
+function escapeHtml(text) {
+    if (!text && text !== 0) return '';
+    return String(text)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
+async function loadAiReviewQueue() {
+    const panel = document.getElementById('aiReviewPanel');
+    const summaryEl = document.getElementById('aiReviewSummary');
+    const rowsEl = document.getElementById('aiReviewRows');
+    if (!panel || !summaryEl || !rowsEl) return;
+
+    try {
+        const data = await api.getCategoriseReviewQueue(currentAccountId, 100);
+        pendingSuggestionItems = data?.items || [];
+
+        if (!pendingSuggestionItems.length) {
+            panel.classList.add('hidden');
+            summaryEl.textContent = 'No pending AI suggestions.';
+            rowsEl.innerHTML = '<tr><td colspan="6" style="padding:0.7rem; color:#6b7280;">No pending suggestions.</td></tr>';
+            return;
+        }
+
+        panel.classList.remove('hidden');
+        summaryEl.textContent = `${pendingSuggestionItems.length} suggestion(s) awaiting review`;
+        rowsEl.innerHTML = pendingSuggestionItems.map(renderSuggestionRow).join('');
+    } catch (error) {
+        console.error('Failed to load AI review queue:', error);
+        panel.classList.remove('hidden');
+        summaryEl.textContent = 'Failed to load AI review queue';
+        rowsEl.innerHTML = `<tr><td colspan="6" style="padding:0.7rem; color:#ef4444;">${escapeHtml(error.message)}</td></tr>`;
+    }
+}
+
+function renderSuggestionRow(item) {
+    const suggestion = item.suggestion || {};
+    const txn = item.transaction || {};
+    const suggestionId = suggestion.id;
+    const selectedCategory = suggestion.suggested_category || 'Uncategorized';
+    const confidence = Number(suggestion.confidence || 0).toFixed(1);
+    const amount = Number(txn.amount || 0);
+    const confidenceColor = Number(confidence) >= 85 ? '#166534' : (Number(confidence) >= 60 ? '#92400e' : '#991b1b');
+
+    return `
+        <tr style="border-bottom:1px solid #f3f4f6;">
+            <td style="padding:0.45rem 0.25rem;">
+                <input type="checkbox" class="suggestion-checkbox" value="${escapeHtml(suggestionId)}">
+            </td>
+            <td style="padding:0.45rem 0.25rem;">
+                <div style="font-weight:600; color:#111827;">${escapeHtml(txn.description || '-')}</div>
+                <div style="font-size:0.75rem; color:#6b7280;">${escapeHtml(txn.date || '-')} | ${amount < 0 ? '-' : ''}£${Math.abs(amount).toFixed(2)}</div>
+            </td>
+            <td style="padding:0.45rem 0.25rem;">${escapeHtml(selectedCategory)}</td>
+            <td style="padding:0.45rem 0.25rem; color:${confidenceColor}; font-weight:600;">${confidence}%</td>
+            <td style="padding:0.45rem 0.25rem; max-width:260px;">${escapeHtml(suggestion.reason || '-')}</td>
+            <td style="padding:0.45rem 0.25rem;">
+                <div style="display:flex; gap:0.4rem; align-items:center;">
+                    <select id="override-${escapeHtml(suggestionId)}" style="padding:0.25rem; border:1px solid #d1d5db; border-radius:0.25rem; font-size:0.8rem;">
+                        ${allCategories.map((cat) => `<option value="${escapeHtml(cat)}" ${cat === selectedCategory ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('')}
+                    </select>
+                    <button data-action="override" data-suggestion-id="${escapeHtml(suggestionId)}" class="btn btn-secondary" style="width:auto; padding:0.25rem 0.5rem; font-size:0.75rem;">Apply</button>
+                </div>
+            </td>
+        </tr>
+    `;
+}
+
+function getSelectedSuggestionIds() {
+    const checkboxes = Array.from(document.querySelectorAll('.suggestion-checkbox:checked'));
+    return checkboxes.map((el) => el.value).filter(Boolean);
+}
+
+function toggleAllSuggestions(event) {
+    const checked = Boolean(event.target?.checked);
+    document.querySelectorAll('.suggestion-checkbox').forEach((el) => {
+        el.checked = checked;
+    });
+}
+
+async function approveSelectedSuggestions() {
+    const ids = getSelectedSuggestionIds();
+    if (!ids.length) {
+        alert('Select at least one suggestion to approve.');
+        return;
+    }
+    await runSuggestionBatchAction(() => api.categoriseApprove(ids), `Approved ${ids.length} suggestion(s)`);
+}
+
+async function rejectSelectedSuggestions() {
+    const ids = getSelectedSuggestionIds();
+    if (!ids.length) {
+        alert('Select at least one suggestion to reject.');
+        return;
+    }
+    await runSuggestionBatchAction(() => api.categoriseReject(ids), `Rejected ${ids.length} suggestion(s)`);
+}
+
+async function acceptHighConfidenceSuggestions() {
+    await runSuggestionBatchAction(
+        () => api.categoriseAcceptHighConfidence(currentAccountId, 85),
+        'Applied high-confidence suggestions',
+    );
+}
+
+async function overrideSuggestion(suggestionId, finalCategory, buttonEl) {
+    if (!suggestionId || !finalCategory) return;
+    if (buttonEl) buttonEl.disabled = true;
+    try {
+        await api.categoriseOverride(suggestionId, finalCategory);
+        await loadDashboard();
+    } catch (error) {
+        console.error('Override failed:', error);
+        alert(`Override failed: ${error.message}`);
+    } finally {
+        if (buttonEl) buttonEl.disabled = false;
+    }
+}
+
+async function runSuggestionBatchAction(actionFn, successMessage) {
+    try {
+        await actionFn();
+        const countEl = document.getElementById('uncategorizedCount');
+        if (countEl) countEl.textContent = successMessage;
+        await loadDashboard();
+    } catch (error) {
+        console.error('Suggestion batch action failed:', error);
+        alert(`Action failed: ${error.message}`);
     }
 }
 
