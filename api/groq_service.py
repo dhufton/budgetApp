@@ -1,6 +1,7 @@
 import json
 import logging
 from groq import Groq
+from src.config import BUILTIN_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -8,9 +9,7 @@ CATEGORISATION_MODEL = 'llama-3.1-8b-instant'
 INSIGHTS_MODEL       = 'llama-3.1-8b-instant'
 CHUNK_SIZE           = 50
 
-VALID_CATEGORIES = {
-    'Bills', 'Entertainment', 'Food', 'Savings', 'Shopping', 'Transport', 'Uncategorized'
-}
+VALID_CATEGORIES = set(BUILTIN_CATEGORIES + ['Uncategorized'])
 
 CATEGORISE_SYSTEM_PROMPT = """You are a UK bank transaction categoriser.
 Given a JSON array of vendor/transaction descriptions, return a JSON object mapping each description to exactly one category.

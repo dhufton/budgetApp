@@ -8,11 +8,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
 
 from src.supabase_client import supabase_admin
 from api.auth import get_current_user
-from src.config import CATEGORY_RULES
+from src.config import CATEGORY_RULES, BUILTIN_CATEGORIES
 
 router = APIRouter()
 
-DEFAULT_CATEGORIES = list(CATEGORY_RULES.keys()) + ['Uncategorized']
+DEFAULT_CATEGORIES = BUILTIN_CATEGORIES + ['Uncategorized']
 
 
 class CategoryCreate(BaseModel):
