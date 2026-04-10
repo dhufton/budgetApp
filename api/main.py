@@ -2,15 +2,17 @@
 import sys
 import os
 import logging
+from time import perf_counter
+from uuid import uuid4
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from api.routes import transactions, upload, categories, budget
 from api.dependencies import get_supabase, get_groq_service
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from api.auth import get_current_user
 from supabase import Client
 from api.groq_service import GroqService
@@ -18,8 +20,13 @@ from api.routes.categories import apply_user_keywords
 from datetime import datetime, timedelta
 from collections import defaultdict
 
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
 logger = logging.getLogger(__name__)
+APP_START_TIME = datetime.utcnow()
 
 app = FastAPI(title="Budget Tracker API", version="1.0.0")
 
@@ -46,8 +53,55 @@ app.include_router(categories.router,   prefix="/api", tags=["categories"])
 app.include_router(budget.router,       prefix="/api", tags=["budget"])
 
 
+@app.middleware("http")
+async def request_observability_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or uuid4().hex
+    request.state.request_id = request_id
+    start = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (perf_counter() - start) * 1000
+        logger.warning(
+            "request_failed request_id=%s method=%s path=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+        )
+        raise
+
+    duration_ms = (perf_counter() - start) * 1000
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    return response
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    request_id = getattr(request.state, "request_id", "unknown")
+    logger.exception(
+        "unhandled_exception request_id=%s method=%s path=%s",
+        request_id,
+        request.method,
+        request.url.path,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "request_id": request_id},
+    )
+
+
 @app.on_event("startup")
 async def startup():
+    logger.info("api_startup version=1.0.0 log_level=%s", LOG_LEVEL)
     try:
         get_supabase()
         logger.info("Supabase client ready")
@@ -194,4 +248,5 @@ async def categorise_transactions(
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "version": "1.0.0"}
+    uptime_seconds = int((datetime.utcnow() - APP_START_TIME).total_seconds())
+    return {"status": "healthy", "version": "1.0.0", "uptime_seconds": uptime_seconds}

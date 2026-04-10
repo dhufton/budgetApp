@@ -13,6 +13,8 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
+      - key: LOG_LEVEL
+        value: INFO
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
