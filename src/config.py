@@ -7,6 +7,7 @@ BUILTIN_CATEGORIES = [
     "Savings",
     "Shopping",
     "Transport",
+    "Transfer",
 ]
 
 # Built-in keyword rules used for deterministic pre-categorisation.
@@ -66,5 +67,11 @@ CATEGORY_RULES = {
         "Shell",
         "BP",
         "National Rail",
+    ],
+    "Transfer": [
+        "Transfer",
+        "Credit Card Payment",
+        "Balance Payment",
+        "Faster Payment",
     ],
 }

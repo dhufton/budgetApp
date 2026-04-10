@@ -4,6 +4,7 @@ let allCategoriesData = [];  // [{name, builtin_keywords, extra_keywords, is_bui
 let pendingKeywords   = {};  // {categoryName: [...keywords]} - unsaved changes
 let currentBudgets    = [];
 let currentSuggestions = {};
+let currentAccounts = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
@@ -12,9 +13,75 @@ document.addEventListener('DOMContentLoaded', async () => {
     const email = localStorage.getItem('user_email');
     document.getElementById('userEmail').textContent = email || 'User';
 
+    await loadAccounts();
     await loadCategories();
     await loadBudgetTargets();
 });
+
+async function loadAccounts() {
+    try {
+        const data = await api.getAccounts();
+        currentAccounts = data?.accounts || [];
+        renderAccounts();
+    } catch (error) {
+        console.error('Failed to load accounts:', error);
+        const el = document.getElementById('accountsList');
+        if (el) el.innerHTML = '<p style="color:#ef4444;">Failed to load accounts</p>';
+    }
+}
+
+function renderAccounts() {
+    const el = document.getElementById('accountsList');
+    if (!el) return;
+    if (currentAccounts.length === 0) {
+        el.innerHTML = '<p style="color:#9ca3af; font-size:0.875rem;">No accounts configured.</p>';
+        return;
+    }
+    el.innerHTML = currentAccounts.map(acc => `
+        <div class="budget-item">
+            <div class="budget-info">
+                <span class="budget-category">${escHtml(acc.name)} ${acc.is_default ? '<span class="accordion-badge">Default</span>' : ''}</span>
+                <span class="budget-amount" style="font-size:0.85rem; color:#6b7280; text-transform:uppercase;">${escHtml(acc.account_type)}</span>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+                ${acc.is_default ? '' : `<button class="btn btn-secondary" style="width:auto; padding:0.4rem 0.7rem;" onclick="makeDefaultAccount('${escAttr(acc.id)}')">Make Default</button>`}
+                ${acc.is_default ? '' : `<button class="btn-delete" onclick="deleteAccount('${escAttr(acc.id)}')">Delete</button>`}
+            </div>
+        </div>
+    `).join('');
+}
+
+async function createAccount() {
+    const name = document.getElementById('accountName')?.value.trim();
+    const type = document.getElementById('accountType')?.value;
+    if (!name) return alert('Please enter an account name.');
+    try {
+        await api.createAccount(name, type);
+        document.getElementById('accountName').value = '';
+        await loadAccounts();
+    } catch (error) {
+        alert('Failed to create account: ' + error.message);
+    }
+}
+
+async function makeDefaultAccount(accountId) {
+    try {
+        await api.updateAccount(accountId, { is_default: true });
+        await loadAccounts();
+    } catch (error) {
+        alert('Failed to set default account: ' + error.message);
+    }
+}
+
+async function deleteAccount(accountId) {
+    if (!confirm('Delete this account? It must be empty and non-default.')) return;
+    try {
+        await api.deleteAccount(accountId);
+        await loadAccounts();
+    } catch (error) {
+        alert('Failed to delete account: ' + error.message);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Tab switching
@@ -256,7 +323,7 @@ async function confirmDeleteCategory(name) {
 function updateBudgetCategoryDropdown() {
     const select = document.getElementById('budgetCategory');
     if (!select) return;
-    const names = allCategoriesData.map(c => c.name).filter(n => n !== 'Uncategorized');
+    const names = allCategoriesData.map(c => c.name).filter(n => n !== 'Uncategorized' && n !== 'Transfer');
     select.innerHTML = names.map(cat =>
         `<option value="${escHtml(cat)}">${escHtml(cat)}</option>`
     ).join('');

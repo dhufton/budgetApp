@@ -1,5 +1,5 @@
 # api/routes/upload.py
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Form
 from fastapi.responses import JSONResponse
 from io import BytesIO
 from datetime import datetime
@@ -14,6 +14,7 @@ from api.auth import get_current_user
 from api.dependencies import get_groq_service
 from api.groq_service import GroqService
 from api.routes.categories import apply_user_keywords
+from api.transfer_rules import apply_transfer_classification
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -22,11 +23,21 @@ logger = logging.getLogger(__name__)
 @router.post("/upload")
 async def upload_statement(
     file: UploadFile = File(...),
+    account_id: str = Form(...),
     user_id: str = Depends(get_current_user),
     groq: GroqService = Depends(get_groq_service),
 ):
     try:
         logger.info(f"[UPLOAD] user={user_id}, filename={file.filename}")
+        account_check = (
+            supabase_admin.table("accounts")
+            .select("id")
+            .eq("id", account_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not account_check.data:
+            raise HTTPException(status_code=400, detail="Invalid account")
 
         # Duplicate check
         existing_paths = set(get_all_statement_paths(user_id))
@@ -78,6 +89,7 @@ async def upload_statement(
         # Insert statement metadata
         statement_result = supabase_admin.table("statements").insert({
             "user_id":     user_id,
+            "account_id":  account_id,
             "storage_key": saved_path,
             "filename":    file.filename,
             "uploaded_at": datetime.utcnow().isoformat(),
@@ -90,6 +102,7 @@ async def upload_statement(
             transactions_to_insert.append({
                 "user_id":      user_id,
                 "statement_id": statement_id,
+                "account_id":   account_id,
                 "date":         row["Date"].strftime("%Y-%m-%d") if hasattr(row["Date"], "strftime") else str(row["Date"]),
                 "description":  str(row["Description"]),
                 "amount":       float(row["Amount"]),
@@ -98,6 +111,7 @@ async def upload_statement(
 
         # Apply user-defined keywords before Groq
         transactions_to_insert = apply_user_keywords(transactions_to_insert, user_id)
+        transactions_to_insert = apply_transfer_classification(transactions_to_insert)
 
         categorised_count = 0
         if transactions_to_insert:
