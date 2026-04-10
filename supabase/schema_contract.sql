@@ -42,9 +42,13 @@ create table if not exists public.budget_targets (
   user_id uuid not null references public.users(id) on delete cascade,
   category text not null,
   target_amount numeric(12,2) not null,
+  threshold_percent numeric(5,2) not null default 80,
   created_at timestamptz not null default now(),
   constraint budget_targets_user_category_unique unique (user_id, category)
 );
+
+alter table public.budget_targets
+  add column if not exists threshold_percent numeric(5,2) not null default 80;
 
 create table if not exists public.vendor_categories (
   id uuid primary key default gen_random_uuid(),

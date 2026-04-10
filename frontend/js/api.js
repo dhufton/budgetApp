@@ -156,11 +156,15 @@ const api = {
         }
     },
 
-    async setBudgetTarget(category, targetAmount) {
+    async setBudgetTarget(category, targetAmount, thresholdPercent = 80) {
         try {
             const response = await authFetch(ENDPOINTS.budgetTargets, {
                 method: 'POST',
-                body: JSON.stringify({ category, target_amount: targetAmount }),
+                body: JSON.stringify({
+                    category,
+                    target_amount: targetAmount,
+                    threshold_percent: thresholdPercent,
+                }),
             });
             if (!response) return null;
             if (!response.ok) {
@@ -170,6 +174,24 @@ const api = {
             return response.json();
         } catch (error) {
             console.error('Failed to set budget target:', error);
+            throw error;
+        }
+    },
+
+    async updateBudgetTarget(category, payload) {
+        try {
+            const response = await authFetch(ENDPOINTS.budgetTarget(category), {
+                method: 'PATCH',
+                body: JSON.stringify(payload),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to update budget target');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to update budget target:', error);
             throw error;
         }
     },
@@ -199,6 +221,31 @@ const api = {
             return response.json();
         } catch (error) {
             console.error('Failed to fetch budget comparison:', error);
+            throw error;
+        }
+    },
+
+    async getBudgetHealth(month = null) {
+        try {
+            const qs = month ? `?month=${encodeURIComponent(month)}` : '';
+            const response = await authFetch(`${ENDPOINTS.budgetHealth}${qs}`);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget health:', error);
+            throw error;
+        }
+    },
+
+    async getBudgetTrend(months = 6) {
+        try {
+            const response = await authFetch(`${ENDPOINTS.budgetTrend}?months=${months}`);
+            if (!response) return null;
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            return response.json();
+        } catch (error) {
+            console.error('Failed to fetch budget trend:', error);
             throw error;
         }
     },
