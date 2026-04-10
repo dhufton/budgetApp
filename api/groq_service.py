@@ -1,13 +1,15 @@
 import json
 import logging
+import os
 from groq import Groq
 from src.config import BUILTIN_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
-CATEGORISATION_MODEL = 'llama-3.1-8b-instant'
+CATEGORISATION_MODEL = os.environ.get('CATEGORISATION_MODEL', 'llama-3.1-8b-instant')
 INSIGHTS_MODEL       = 'llama-3.1-8b-instant'
-CHUNK_SIZE           = 50
+CHUNK_SIZE           = int(os.environ.get('CATEGORISATION_CHUNK_SIZE', '15'))
+SUGGESTION_MAX_TOKENS = int(os.environ.get('CATEGORISATION_SUGGESTION_MAX_TOKENS', '3200'))
 
 VALID_CATEGORIES = set(BUILTIN_CATEGORIES + ['Uncategorized'])
 
@@ -67,7 +69,18 @@ Rules:
 - suggested_category must be from allowed categories exactly
 - confidence must be numeric 0-100
 - reason must be under 80 characters
-- if uncertain, use low confidence and/or Uncategorized"""
+- if uncertain, use low confidence and/or Uncategorized
+- prefer specific categories when merchant is recognisable (avoid defaulting to Uncategorized)
+
+Examples:
+- Pizza Hut / Domino's / McDonald's / KFC / Pret / Nando's -> Food
+- Tesco / Sainsbury's / Lidl / Aldi / Asda / Waitrose -> Food
+- Amazon / eBay / ASOS / Argos / Apple Store -> Shopping
+- TfL / Uber trip / Trainline / National Rail / Shell / BP -> Transport
+- Netflix / Spotify / Steam / Cinema -> Entertainment
+- Council Tax / British Gas / Thames Water / O2 / Rent -> Bills
+- Chase Saver / ISA / Pension / savings transfer -> Savings
+- Credit card payment / internal transfer / balance payment -> Transfer"""
 
 
 class GroqService:
@@ -281,68 +294,100 @@ class GroqService:
             }
             for t in transactions
         ]
+        description_by_id = {row["transaction_id"]: row["description"] for row in payload}
 
-        results = []
-        for i in range(0, len(payload), CHUNK_SIZE):
-            chunk = payload[i:i + CHUNK_SIZE]
+        parsed_by_id = {}
+
+        def parse_items(items: list) -> None:
+            for item in items:
+                tx_id = str(item.get("transaction_id", "")).strip()
+                if not tx_id:
+                    continue
+                suggested = str(item.get("suggested_category", "Uncategorized")).strip()
+                if suggested not in categories:
+                    suggested = "Uncategorized"
+                try:
+                    confidence = float(item.get("confidence", 0))
+                except (TypeError, ValueError):
+                    confidence = 0.0
+                confidence = max(0.0, min(100.0, confidence))
+                reason = str(item.get("reason", "")).strip()[:80]
+                parsed_by_id[tx_id] = {
+                    "transaction_id": tx_id,
+                    "suggested_category": suggested,
+                    "confidence": confidence,
+                    "reason": reason,
+                    "model_name": CATEGORISATION_MODEL,
+                }
+
+        def run_pass(pass_payload: list, pass_chunk_size: int, pass_name: str) -> None:
+            requested = len(pass_payload)
+            returned_before = len(parsed_by_id)
+            for i in range(0, len(pass_payload), pass_chunk_size):
+                chunk = pass_payload[i:i + pass_chunk_size]
+                try:
+                    raw = self._call_groq_json(
+                        SUGGESTION_SYSTEM_PROMPT,
+                        "Allowed categories: "
+                        + json.dumps(categories)
+                        + "\nTransactions: "
+                        + json.dumps(chunk),
+                        max_tokens=SUGGESTION_MAX_TOKENS,
+                    )
+                    suggestions = raw.get("suggestions", []) if isinstance(raw, dict) else []
+                    parse_items(suggestions)
+                except Exception as e:
+                    logger.error("suggest_transaction_categories %s chunk failed: %r", pass_name, e)
+            returned_after = len(parsed_by_id)
+            logger.info(
+                "suggest_transaction_categories_pass pass=%s requested=%s new_returned=%s total_returned=%s",
+                pass_name,
+                requested,
+                max(0, returned_after - returned_before),
+                returned_after,
+            )
+
+        # Multi-pass strategy: broad -> narrower -> single-item retry for missing IDs.
+        run_pass(payload, CHUNK_SIZE, "primary")
+        missing_ids = [tx["transaction_id"] for tx in payload if tx["transaction_id"] not in parsed_by_id]
+        if missing_ids:
+            run_pass([tx for tx in payload if tx["transaction_id"] in missing_ids], 5, "retry_small")
+            missing_ids = [tx["transaction_id"] for tx in payload if tx["transaction_id"] not in parsed_by_id]
+        if missing_ids:
+            run_pass([tx for tx in payload if tx["transaction_id"] in missing_ids], 1, "retry_single")
+            missing_ids = [tx["transaction_id"] for tx in payload if tx["transaction_id"] not in parsed_by_id]
+
+        # Final fallback for any still-missing IDs: vendor mapping.
+        if missing_ids:
             try:
-                raw = self._call_groq_json(
-                    SUGGESTION_SYSTEM_PROMPT,
-                    "Allowed categories: "
-                    + json.dumps(categories)
-                    + "\nTransactions: "
-                    + json.dumps(chunk),
-                    max_tokens=1400,
-                )
-                suggestions = raw.get("suggestions", []) if isinstance(raw, dict) else []
-                for item in suggestions:
-                    tx_id = str(item.get("transaction_id", "")).strip()
-                    suggested = str(item.get("suggested_category", "Uncategorized")).strip()
-                    if suggested not in categories:
-                        suggested = "Uncategorized"
-                    try:
-                        confidence = float(item.get("confidence", 0))
-                    except (TypeError, ValueError):
-                        confidence = 0.0
-                    confidence = max(0.0, min(100.0, confidence))
-                    reason = str(item.get("reason", "")).strip()[:80]
-                    if not tx_id:
-                        continue
-                    results.append(
-                        {
-                            "transaction_id": tx_id,
-                            "suggested_category": suggested,
-                            "confidence": confidence,
-                            "reason": reason,
-                            "model_name": CATEGORISATION_MODEL,
-                        }
-                    )
-            except Exception as e:
-                logger.error("suggest_transaction_categories chunk failed: %r", e)
-                # fallback per transaction
-                for tx in chunk:
-                    results.append(
-                        {
-                            "transaction_id": tx.get("transaction_id"),
-                            "suggested_category": "Uncategorized",
-                            "confidence": 0.0,
-                            "reason": "Model unavailable",
-                            "model_name": CATEGORISATION_MODEL,
-                        }
-                    )
+                fallback_descriptions = [description_by_id.get(tx_id, "") for tx_id in missing_ids]
+                fallback_map = self.categorise_vendors(fallback_descriptions, force_groq=False)
+            except Exception:
+                fallback_map = {}
 
-        # Ensure all input transactions are represented at least once.
-        existing = {row.get("transaction_id") for row in results}
-        for tx in payload:
-            tx_id = tx.get("transaction_id")
-            if tx_id not in existing:
-                results.append(
-                    {
-                        "transaction_id": tx_id,
-                        "suggested_category": "Uncategorized",
-                        "confidence": 0.0,
-                        "reason": "No suggestion returned",
-                        "model_name": CATEGORISATION_MODEL,
-                    }
-                )
-        return results
+            for tx_id in missing_ids:
+                description = description_by_id.get(tx_id, "")
+                fallback_category = fallback_map.get(description, "Uncategorized")
+                if fallback_category != "Uncategorized":
+                    confidence = 68.0
+                    reason = "Fallback vendor mapping"
+                else:
+                    confidence = 0.0
+                    reason = "No suggestion returned"
+                parsed_by_id[tx_id] = {
+                    "transaction_id": tx_id,
+                    "suggested_category": fallback_category,
+                    "confidence": confidence,
+                    "reason": reason,
+                    "model_name": CATEGORISATION_MODEL,
+                }
+
+        logger.info(
+            "suggest_transaction_categories_complete total=%s returned=%s missing_final=%s chunk_size=%s max_tokens=%s",
+            len(payload),
+            len(parsed_by_id),
+            len([tx for tx in payload if tx['transaction_id'] not in parsed_by_id]),
+            CHUNK_SIZE,
+            SUGGESTION_MAX_TOKENS,
+        )
+        return [parsed_by_id[tx["transaction_id"]] for tx in payload if tx["transaction_id"] in parsed_by_id]
