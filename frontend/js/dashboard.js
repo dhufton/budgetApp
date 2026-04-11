@@ -87,6 +87,47 @@ function bindEvent(id, event, handler) {
     else console.warn(`bindEvent: element #${id} not found - listener not attached`);
 }
 
+function buildCategoryList(apiCategories = [], txns = []) {
+    const seen = new Set();
+    const addCategory = (value) => {
+        const name = String(value || '').trim();
+        if (name) seen.add(name);
+    };
+
+    DEFAULT_CATEGORIES.forEach(addCategory);
+    (apiCategories || []).forEach(addCategory);
+    (txns || []).forEach((txn) => addCategory(txn?.category || 'Uncategorized'));
+
+    const orderedDefaults = DEFAULT_CATEGORIES.filter((cat) => seen.has(cat));
+    const custom = [...seen]
+        .filter((cat) => !DEFAULT_CATEGORIES.includes(cat))
+        .sort((a, b) => a.localeCompare(b));
+
+    return [...orderedDefaults, ...custom];
+}
+
+function renderUncategorisedStatus() {
+    const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
+    const alertEl = document.getElementById('uncategorizedAlert');
+    const countEl = document.getElementById('uncategorizedCount');
+    const btn = document.getElementById('fixCategoriesBtn');
+
+    if (!alertEl || !countEl) return;
+
+    if (uncategorizedCount > 0) {
+        alertEl.classList.remove('hidden');
+        countEl.textContent = `${uncategorizedCount} transaction${uncategorizedCount !== 1 ? 's' : ''} need categorisation`;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Generate AI Suggestions';
+            btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed');
+        }
+        return;
+    }
+
+    alertEl.classList.add('hidden');
+}
+
 // ---------------------------------------------------------------------------
 // File upload
 // ---------------------------------------------------------------------------
@@ -211,9 +252,9 @@ function populateAccountSelectors() {
 async function loadCategories() {
     try {
         const data = await api.getCategories();
-        allCategories = data?.categories || ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        allCategories = buildCategoryList(data?.categories || [], allTransactions);
     } catch {
-        allCategories = ['Food', 'Transport', 'Shopping', 'Entertainment', 'Bills', 'Savings', 'Uncategorized'];
+        allCategories = buildCategoryList(allCategories, allTransactions);
     }
 }
 
@@ -222,27 +263,22 @@ async function loadCategories() {
 // ---------------------------------------------------------------------------
 async function loadDashboard() {
     try {
-        const data = await api.getTransactions(currentAccountId);
-        if (!data?.transactions) { showEmptyState(); return; }
+        const [transactionsData, categoriesData] = await Promise.all([
+            api.getTransactions(currentAccountId),
+            api.getCategories().catch(() => null),
+        ]);
+        if (!transactionsData?.transactions) { showEmptyState(); return; }
 
-        allTransactions = data.transactions;
+        allTransactions = transactionsData.transactions;
+        allCategories = buildCategoryList(categoriesData?.categories || allCategories, allTransactions);
         filteredTransactions = [...allTransactions];
         currentPage = 1;
 
-        const uncategorizedCount = allTransactions.filter(t => t.category === 'Uncategorized').length;
         document.getElementById('totalTransactions').textContent = allTransactions.length.toLocaleString();
-
-        if (uncategorizedCount > 0) {
-            document.getElementById('uncategorizedAlert').classList.remove('hidden');
-            document.getElementById('uncategorizedCount').textContent =
-                `${uncategorizedCount} transaction${uncategorizedCount !== 1 ? 's' : ''} need categorisation`;
-            const btn = document.getElementById('fixCategoriesBtn');
-            if (btn) { btn.disabled = false; btn.textContent = 'Generate AI Suggestions'; btn.classList.remove('hidden', 'opacity-75', 'cursor-not-allowed'); }
-        } else {
-            document.getElementById('uncategorizedAlert').classList.add('hidden');
-        }
+        renderUncategorisedStatus();
 
         if (allTransactions.length === 0) {
+            populateCategoryFilter();
             showEmptyState();
             await loadBudgetHealth();
             await loadBudgetTrend();
@@ -943,8 +979,11 @@ async function ignoreRecurringRule(ruleId) {
 function populateCategoryFilter() {
     const sel = document.getElementById('categoryFilter');
     if (!sel) return;
+    const previousValue = sel.value || 'all';
+    allCategories = buildCategoryList(allCategories, allTransactions);
     sel.innerHTML = '<option value="all">All Categories</option>' +
         allCategories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+    sel.value = allCategories.includes(previousValue) ? previousValue : 'all';
 }
 
 function filterAndRenderTable() {
@@ -1040,6 +1079,15 @@ async function updateCategory(transactionId, category) {
         await api.updateTransactionCategory(transactionId, category);
         const t = allTransactions.find(t => t.id === transactionId);
         if (t) t.category = category;
+        allCategories = buildCategoryList(allCategories, allTransactions);
+        renderUncategorisedStatus();
+        calculateMetrics();
+        renderPieChart();
+        renderLineChart();
+        renderCategorySpendingChart();
+        populateCategoryFilter();
+        filterAndRenderTable();
+        await Promise.all([loadBudgetHealth(), loadBudgetTrend()]);
     } catch (error) {
         console.error('Failed to update category:', error);
         alert('Failed to update category. Please try again.');
