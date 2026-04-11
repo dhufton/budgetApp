@@ -47,10 +47,20 @@
         }
 
         try {
+            // Prevent stale session tokens from previous users on shared devices.
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user_email');
+            localStorage.removeItem('user_id');
+
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
             if (error) {
                 showMessage(error.message, 'error');
+                return;
+            }
+
+            if (!data?.session || !data?.user?.id) {
+                showMessage('Login failed: session was not created', 'error');
             } else {
                 localStorage.setItem('access_token', data.session.access_token);
                 localStorage.setItem('user_email', email);
@@ -87,8 +97,16 @@
             if (error) {
                 showMessage(error.message, 'error');
             } else {
-                showMessage('Account created! Please check your email to confirm.', 'success');
-                setTimeout(() => window.showLogin(), 2000);
+                if (data?.session && data?.user?.id) {
+                    localStorage.setItem('access_token', data.session.access_token);
+                    localStorage.setItem('user_email', email);
+                    localStorage.setItem('user_id', data.user.id);
+                    showMessage('Account created and signed in.', 'success');
+                    setTimeout(() => { window.location.href = '/dashboard'; }, 600);
+                } else {
+                    showMessage('Account created! Please check your email to confirm.', 'success');
+                    setTimeout(() => window.showLogin(), 2000);
+                }
             }
         } catch (err) {
             showMessage('Registration failed: ' + err.message, 'error');

@@ -27,6 +27,7 @@ If a table/column/constraint changes, update both files in the same PR.
 - `storage_key` `text` not null unique
 - `filename` `text` not null
 - `uploaded_at` `timestamptz` not null default `now()`
+- Unique key: `(user_id, account_id, filename)`
 
 ### `transactions`
 - `id` `uuid` primary key
