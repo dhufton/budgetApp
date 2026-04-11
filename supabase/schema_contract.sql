@@ -196,6 +196,8 @@ create index if not exists idx_statements_user
   on public.statements(user_id);
 create index if not exists idx_statements_user_account_uploaded
   on public.statements(user_id, account_id, uploaded_at desc);
+create unique index if not exists idx_statements_user_account_filename
+  on public.statements(user_id, account_id, filename);
 create index if not exists idx_accounts_user
   on public.accounts(user_id);
 

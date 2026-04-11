@@ -40,14 +40,35 @@ async def upload_statement(
         if not account_check.data:
             raise HTTPException(status_code=400, detail="Invalid account")
 
-        # Duplicate check
+        filename = (file.filename or "").strip()
+        if not filename:
+            raise HTTPException(status_code=400, detail="Filename missing")
+
+        # Duplicate check scoped to user + account + filename.
+        existing_statement = (
+            supabase_admin.table("statements")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("account_id", account_id)
+            .eq("filename", filename)
+            .limit(1)
+            .execute()
+        )
+        if existing_statement.data:
+            logger.info(f"[UPLOAD] duplicate statement user={user_id} account={account_id} filename={filename}")
+            return JSONResponse(
+                status_code=409,
+                content={"success": False, "message": f"{filename} already exists for this account"},
+            )
+
+        # Backward-compatible storage-path duplicate check as fallback.
         existing_paths = set(get_all_statement_paths(user_id))
-        storage_path = f"{user_id}/{file.filename}"
+        storage_path = f"{user_id}/{account_id}/{filename}"
         if storage_path in existing_paths:
             logger.info(f"[UPLOAD] duplicate: {storage_path}")
             return JSONResponse(
                 status_code=409,
-                content={"success": False, "message": f"{file.filename} already exists"},
+                content={"success": False, "message": f"{filename} already exists for this account"},
             )
 
         content = await file.read()
@@ -80,7 +101,7 @@ async def upload_statement(
         # Save file to storage
         file_stream.seek(0)
         file_stream.name = file.filename
-        saved_path = save_uploaded_file(file_stream, user_id)
+        saved_path = save_uploaded_file(file_stream, user_id, storage_path_override=storage_path)
 
         # Ensure user row exists
         user_row = supabase_admin.table("users").select("id").eq("id", user_id).execute()
@@ -92,7 +113,7 @@ async def upload_statement(
             "user_id":     user_id,
             "account_id":  account_id,
             "storage_key": saved_path,
-            "filename":    file.filename,
+            "filename":    filename,
             "uploaded_at": datetime.utcnow().isoformat(),
         }).execute()
         statement_id = statement_result.data[0]["id"] if statement_result.data else None
@@ -159,7 +180,7 @@ async def upload_statement(
 
         return {
             "success":      True,
-            "message":      f"Uploaded {file.filename}",
+            "message":      f"Uploaded {filename}",
             "transactions": len(df),
             "categorised":  categorised_count,
             "storage_path": saved_path,

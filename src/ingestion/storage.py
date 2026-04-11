@@ -9,7 +9,7 @@ from .b2_client import (
 )
 
 
-def save_uploaded_file(file, user_id: str) -> str:
+def save_uploaded_file(file, user_id: str, storage_path_override: Optional[str] = None) -> str:
     """Save file to B2 storage with correct filename"""
 
     # Get filename
@@ -22,7 +22,7 @@ def save_uploaded_file(file, user_id: str) -> str:
 
     print(f"[STORAGE] Saving as: {filename}")
 
-    storage_path = f"{user_id}/{filename}"
+    storage_path = storage_path_override or f"{user_id}/{filename}"
 
     # Read content
     if hasattr(file, 'read'):
