@@ -1,6 +1,6 @@
 # api/routes/categories.py
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 import sys, os
 
@@ -17,11 +17,43 @@ DEFAULT_CATEGORIES = BUILTIN_CATEGORIES + ['Uncategorized']
 
 class CategoryCreate(BaseModel):
     name: str
-    keywords: List[str] = []
+    keywords: List[str] = Field(default_factory=list)
 
 
 class KeywordsUpdate(BaseModel):
     keywords: List[str]
+
+
+class RecategoriseAllRequest(BaseModel):
+    account_id: str = "all"
+
+
+def _validate_account_scope(user_id: str, account_id: str) -> str:
+    scope = account_id or "all"
+    if scope == "all":
+        return scope
+    account = (
+        supabase_admin.table("accounts")
+        .select("id")
+        .eq("id", scope)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not account.data:
+        raise HTTPException(status_code=400, detail="Invalid account")
+    return scope
+
+
+def _build_keyword_map(rows: List[dict]) -> dict:
+    kw_map = {}
+    for row in rows:
+        category = row.get("category")
+        for kw in (row.get("keywords") or []):
+            trimmed = str(kw or "").strip()
+            if trimmed and category:
+                kw_map[trimmed.lower()] = category
+    return kw_map
 
 
 @router.get("/categories")
@@ -115,6 +147,77 @@ async def update_keywords(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/categories/recategorise-all")
+async def recategorise_all_transactions(
+    request: RecategoriseAllRequest,
+    user_id: str = Depends(get_current_user)
+):
+    try:
+        account_scope = _validate_account_scope(user_id, request.account_id)
+
+        categories_result = (
+            supabase_admin.table("categories")
+            .select("category, keywords")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        kw_map = _build_keyword_map(categories_result.data or [])
+        if not kw_map:
+            return {"success": True, "scanned": 0, "matched": 0, "changed": 0, "message": "No keywords configured"}
+
+        tx_query = (
+            supabase_admin.table("transactions")
+            .select("id, description, category")
+            .eq("user_id", user_id)
+        )
+        if account_scope != "all":
+            tx_query = tx_query.eq("account_id", account_scope)
+        tx_rows = tx_query.execute().data or []
+
+        # Prefer longer keywords first to reduce partial-match misclassification.
+        ordered_keywords = sorted(kw_map.items(), key=lambda kv: len(kv[0]), reverse=True)
+
+        scanned = len(tx_rows)
+        matched = 0
+        changed = 0
+
+        for txn in tx_rows:
+            description = str(txn.get("description") or "").lower()
+            target_category = None
+            for keyword, category in ordered_keywords:
+                if keyword in description:
+                    target_category = category
+                    break
+            if not target_category:
+                continue
+
+            matched += 1
+            if txn.get("category") == target_category:
+                continue
+
+            (
+                supabase_admin.table("transactions")
+                .update({"category": target_category})
+                .eq("id", txn["id"])
+                .eq("user_id", user_id)
+                .execute()
+            )
+            changed += 1
+
+        return {
+            "success": True,
+            "scanned": scanned,
+            "matched": matched,
+            "changed": changed,
+            "message": f"Recategorised {changed} transaction(s) from keyword rules",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[CATEGORIES] Error recategorising all: {repr(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.delete("/categories/{category}")
 async def delete_category(
     category: str,
@@ -147,20 +250,17 @@ def apply_user_keywords(transactions: list, user_id: str) -> list:
             .eq("user_id", user_id) \
             .execute()
 
-        kw_map = {}
-        for row in (result.data or []):
-            for kw in (row.get("keywords") or []):
-                if kw.strip():
-                    kw_map[kw.strip().upper()] = row["category"]
+        kw_map = _build_keyword_map(result.data or [])
 
         if not kw_map:
             return transactions
 
+        ordered_keywords = sorted(kw_map.items(), key=lambda kv: len(kv[0]), reverse=True)
         for txn in transactions:
             if txn.get("category", "Uncategorized") == "Uncategorized":
-                desc_upper = txn.get("description", "").upper()
-                for kw_upper, cat in kw_map.items():
-                    if kw_upper in desc_upper:
+                desc_lower = str(txn.get("description", "")).lower()
+                for kw_lower, cat in ordered_keywords:
+                    if kw_lower in desc_lower:
                         txn["category"] = cat
                         break
 
