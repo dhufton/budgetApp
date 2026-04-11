@@ -16,6 +16,7 @@ const ENDPOINTS = {
     categories:        '/api/categories',
     category:          (name)   => `/api/categories/${encodeURIComponent(name)}`,
     categoryKeywords:  (name)   => `/api/categories/${encodeURIComponent(name)}/keywords`,
+    categoriesRecategoriseAll: '/api/categories/recategorise-all',
     budgetTargets:     '/api/budget-targets',
     budgetTarget:      (name)   => `/api/budget-targets/${encodeURIComponent(name)}`,
     budgetComparison:  '/api/budget-comparison',

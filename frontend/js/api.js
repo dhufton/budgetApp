@@ -137,6 +137,24 @@ const api = {
         }
     },
 
+    async recategoriseAllByKeywords(accountId = 'all') {
+        try {
+            const response = await authFetch(ENDPOINTS.categoriesRecategoriseAll, {
+                method: 'POST',
+                body: JSON.stringify({ account_id: accountId }),
+            });
+            if (!response) return null;
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.detail || 'Failed to recategorise transactions');
+            }
+            return response.json();
+        } catch (error) {
+            console.error('Failed to recategorise transactions:', error);
+            throw error;
+        }
+    },
+
     async deleteCategory(category) {
         try {
             const response = await authFetch(ENDPOINTS.category(category), {

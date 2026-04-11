@@ -135,16 +135,16 @@ async def get_config():
     }
 
 
-@app.api_route("/",             methods=["GET", "HEAD"])
+@app.api_route("/",             methods=["GET", "HEAD"], include_in_schema=False)
 async def root():             return FileResponse("frontend/index.html")
 
-@app.api_route("/dashboard",    methods=["GET", "HEAD"])
+@app.api_route("/dashboard",    methods=["GET", "HEAD"], include_in_schema=False)
 async def dashboard():        return FileResponse("frontend/dashboard.html")
 
-@app.api_route("/settings",     methods=["GET", "HEAD"])
+@app.api_route("/settings",     methods=["GET", "HEAD"], include_in_schema=False)
 async def settings_page():    return FileResponse("frontend/settings.html")
 
-@app.api_route("/transactions", methods=["GET", "HEAD"])
+@app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
 async def transactions_page(): return FileResponse("frontend/transactions.html")
 
 
