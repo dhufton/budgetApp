@@ -144,6 +144,25 @@ Open: [http://localhost:8000/](http://localhost:8000/)
 - `GET /api/insights`
 - `GET /api/budget-suggestions`
 
+## OpenAPI / Swagger
+
+- Interactive Swagger UI: `GET /docs`
+- ReDoc: `GET /redoc`
+- Live schema: `GET /openapi.json`
+- Committed schema snapshot: `docs/openapi/openapi.json`
+
+Regenerate committed schema:
+
+```bash
+./.venv/bin/python scripts/export_openapi.py
+```
+
+Schema sync is enforced by:
+
+- `tests/test_openapi_schema_sync.py`
+
+When adding/changing endpoints, regenerate and commit `docs/openapi/openapi.json` in the same PR.
+
 ## Testing
 
 Run all tests:
