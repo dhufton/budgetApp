@@ -187,6 +187,52 @@
                         </div>
                     </div>
                 </div>
+
+                <div style="margin-top:2rem; border-top:1px solid #e5e7eb; padding-top:1.25rem;">
+                    <h3 style="font-size:1rem; margin-bottom:0.5rem; color:#374151;">Goals + Affordability Planner</h3>
+                    <p style="color:#6b7280; margin-bottom:1rem; font-size:0.875rem;">
+                        Add a savings or purchase goal and see if you can afford it by target date.
+                    </p>
+
+                    <div style="display:grid; grid-template-columns: 1.4fr 0.9fr 0.9fr 0.9fr 0.9fr 0.9fr; gap:0.5rem; align-items:end; margin-bottom:0.75rem;">
+                        <div>
+                            <label for="goalName" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Goal name</label>
+                            <input id="goalName" type="text" placeholder="e.g. New laptop" />
+                        </div>
+                        <div>
+                            <label for="goalType" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Type</label>
+                            <select id="goalType" class="form-select">
+                                <option value="planned_purchase">Planned purchase</option>
+                                <option value="savings_target">Savings target</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="goalAmount" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Target (£)</label>
+                            <input id="goalAmount" type="number" min="0.01" step="0.01" placeholder="1200" />
+                        </div>
+                        <div>
+                            <label for="goalSaved" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Current saved (£)</label>
+                            <input id="goalSaved" type="number" min="0" step="0.01" placeholder="200" />
+                        </div>
+                        <div>
+                            <label for="goalDate" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Target date</label>
+                            <input id="goalDate" type="date" />
+                        </div>
+                        <div>
+                            <label for="goalAccountScope" style="display:block; font-size:0.8rem; color:#374151; margin-bottom:0.3rem;">Scope</label>
+                            <select id="goalAccountScope" class="form-select">
+                                <option value="all">All accounts</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; margin-bottom:0.75rem;">
+                        <button onclick="createGoal()" class="btn" style="width:auto; padding:0.6rem 1rem;">Add Goal</button>
+                    </div>
+                    <div id="goalsStatus" style="font-size:0.85rem; color:#6b7280; margin-bottom:0.5rem;"></div>
+                    <div id="goalsList" class="budgets-list">
+                        <p style="color:#9ca3af; font-size:0.875rem;">No goals yet.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

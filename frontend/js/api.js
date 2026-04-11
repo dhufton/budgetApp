@@ -265,6 +265,69 @@ const api = {
         }
     },
 
+    async getGoals({ status = 'active', accountScope = 'all' } = {}) {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        if (accountScope && accountScope !== 'all') params.set('account_scope', accountScope);
+        const response = await authFetch(`${ENDPOINTS.goals}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch goals');
+        }
+        return response.json();
+    },
+
+    async createGoal(payload) {
+        const response = await authFetch(ENDPOINTS.goals, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to create goal');
+        }
+        return response.json();
+    },
+
+    async updateGoal(goalId, payload) {
+        const response = await authFetch(ENDPOINTS.goal(goalId), {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to update goal');
+        }
+        return response.json();
+    },
+
+    async archiveGoal(goalId) {
+        const response = await authFetch(ENDPOINTS.goal(goalId), {
+            method: 'DELETE',
+        });
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to archive goal');
+        }
+        return response.json();
+    },
+
+    async getGoalsAffordability(status = 'active') {
+        const params = new URLSearchParams();
+        if (status) params.set('status', status);
+        const response = await authFetch(`${ENDPOINTS.goalsAffordability}?${params.toString()}`);
+        if (!response) return null;
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || 'Failed to fetch goals affordability');
+        }
+        return response.json();
+    },
+
     async updateTransactionCategory(transactionId, category) {
         try {
             const response = await authFetch(ENDPOINTS.transactionCategory(transactionId), {

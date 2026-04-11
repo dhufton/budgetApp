@@ -133,6 +133,20 @@ If a table/column/constraint changes, update both files in the same PR.
 - `updated_at` `timestamptz` not null default `now()`
 - Unique key: `(user_id, account_id, merchant_key)`
 
+### `financial_goals`
+- `id` `uuid` primary key
+- `user_id` `uuid` not null references `users(id)`
+- `account_scope` `text` not null default `'all'` (`all` or specific account id)
+- `name` `text` not null
+- `goal_type` `text` check in `savings_target|planned_purchase`
+- `target_amount` `numeric(12,2)` not null, must be `> 0`
+- `current_saved` `numeric(12,2)` not null default `0`
+- `target_date` `date` not null
+- `status` `text` not null default `'active'` check in `active|completed|archived`
+- `notes` `text` nullable
+- `created_at` `timestamptz` not null default `now()`
+- `updated_at` `timestamptz` not null default `now()`
+
 ## Expected Built-In Categories
 
 - `Bills`

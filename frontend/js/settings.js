@@ -6,6 +6,7 @@ let currentBudgets    = [];
 let currentSuggestions = {};
 let currentAccounts = [];
 let currentRecurringRules = [];
+let currentGoals = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     const token = await window.checkAuth();
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadCategories();
     await loadBudgetTargets();
     await loadRecurringRules();
+    await loadGoals();
 
     document.getElementById('recurringAccountScope')?.addEventListener('change', loadRecurringRules);
     document.getElementById('recurringStatusFilter')?.addEventListener('change', loadRecurringRules);
@@ -30,6 +32,7 @@ async function loadAccounts() {
         renderAccounts();
         populateRecurringAccountScope();
         populateManualRecurringInputs();
+        populateGoalAccountScope();
     } catch (error) {
         console.error('Failed to load accounts:', error);
         const el = document.getElementById('accountsList');
@@ -88,6 +91,20 @@ function populateManualRecurringInputs() {
         categorySelect.innerHTML = names.map((name) =>
             `<option value="${escHtml(name)}">${escHtml(name)}</option>`
         ).join('');
+    }
+}
+
+function populateGoalAccountScope() {
+    const select = document.getElementById('goalAccountScope');
+    if (!select) return;
+    const selected = select.value || 'all';
+    select.innerHTML = '<option value="all">All accounts</option>' + currentAccounts
+        .map((acc) => `<option value="${escAttr(acc.id)}">${escHtml(acc.name)}</option>`)
+        .join('');
+    if (selected === 'all' || currentAccounts.some((acc) => acc.id === selected)) {
+        select.value = selected;
+    } else {
+        select.value = 'all';
     }
 }
 
@@ -560,6 +577,116 @@ async function loadBudgetTargets() {
         console.error('Failed to load budget targets:', error);
         document.getElementById('budgetsList').innerHTML =
             '<p style="color:#ef4444; font-size:0.875rem; padding:0.5rem 0;">Failed to load budget targets</p>';
+    }
+}
+
+function goalVerdictBadge(verdict) {
+    if (verdict === 'can_afford_now') {
+        return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.75rem;font-weight:600;">Can afford now</span>';
+    }
+    if (verdict === 'can_afford_by_date') {
+        return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#dbeafe;color:#1d4ed8;font-size:0.75rem;font-weight:600;">On track by date</span>';
+    }
+    return '<span style="display:inline-block;padding:0.15rem 0.5rem;border-radius:999px;background:#fee2e2;color:#991b1b;font-size:0.75rem;font-weight:600;">Not yet affordable</span>';
+}
+
+function goalTypeLabel(value) {
+    return value === 'savings_target' ? 'Savings target' : 'Planned purchase';
+}
+
+function renderGoals() {
+    const listEl = document.getElementById('goalsList');
+    if (!listEl) return;
+    if (!currentGoals.length) {
+        listEl.innerHTML = '<p style="color:#9ca3af; font-size:0.875rem;">No goals configured.</p>';
+        return;
+    }
+
+    listEl.innerHTML = currentGoals.map((item) => {
+        const goal = item.goal || {};
+        const aff = item.affordability || {};
+        return `
+            <div class="budget-item">
+                <div class="budget-info" style="max-width:68%;">
+                    <span class="budget-category">${escHtml(goal.name || '-')} <span class="accordion-badge">${escHtml(goalTypeLabel(goal.goal_type || 'planned_purchase'))}</span></span>
+                    <span class="budget-amount" style="font-size:0.82rem; color:#6b7280;">
+                        Target £${Number(goal.target_amount || 0).toFixed(2)} by ${escHtml(goal.target_date || '-')} | Saved £${Number(goal.current_saved || 0).toFixed(2)}
+                    </span>
+                    <span class="budget-amount" style="font-size:0.82rem; color:#374151;">
+                        Required/month: £${Number(aff.required_monthly_saving || 0).toFixed(2)} | Avg net/month: £${Number(aff.avg_net_monthly_saving || 0).toFixed(2)}
+                    </span>
+                </div>
+                <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                    ${goalVerdictBadge(aff.verdict)}
+                    <button class="btn-delete" onclick="archiveGoal('${escAttr(goal.id || '')}')">Archive</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function loadGoals() {
+    const statusEl = document.getElementById('goalsStatus');
+    if (statusEl) statusEl.textContent = 'Loading goals...';
+    try {
+        const data = await api.getGoalsAffordability('active');
+        currentGoals = data?.items || [];
+        renderGoals();
+        if (statusEl) statusEl.textContent = `${currentGoals.length} active goal(s)`;
+    } catch (error) {
+        console.error('Failed to load goals:', error);
+        currentGoals = [];
+        renderGoals();
+        if (statusEl) statusEl.textContent = `Failed to load goals: ${error.message}`;
+    }
+}
+
+async function createGoal() {
+    const name = document.getElementById('goalName')?.value.trim();
+    const goalType = document.getElementById('goalType')?.value || 'planned_purchase';
+    const targetAmount = parseFloat(document.getElementById('goalAmount')?.value || '0');
+    const currentSaved = parseFloat(document.getElementById('goalSaved')?.value || '0');
+    const targetDate = document.getElementById('goalDate')?.value;
+    const accountScope = document.getElementById('goalAccountScope')?.value || 'all';
+    const statusEl = document.getElementById('goalsStatus');
+
+    if (!name) return alert('Please enter a goal name.');
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) return alert('Please enter a valid target amount.');
+    if (!Number.isFinite(currentSaved) || currentSaved < 0) return alert('Please enter a valid current saved amount.');
+    if (!targetDate) return alert('Please select a target date.');
+
+    try {
+        await api.createGoal({
+            name,
+            goal_type: goalType,
+            target_amount: targetAmount,
+            current_saved: currentSaved,
+            target_date: targetDate,
+            account_scope: accountScope,
+        });
+        document.getElementById('goalName').value = '';
+        document.getElementById('goalAmount').value = '';
+        document.getElementById('goalSaved').value = '';
+        document.getElementById('goalDate').value = '';
+        if (statusEl) statusEl.textContent = 'Goal created.';
+        await loadGoals();
+    } catch (error) {
+        console.error('Failed to create goal:', error);
+        if (statusEl) statusEl.textContent = `Failed to create goal: ${error.message}`;
+    }
+}
+
+async function archiveGoal(goalId) {
+    if (!goalId) return;
+    if (!confirm('Archive this goal?')) return;
+    const statusEl = document.getElementById('goalsStatus');
+    try {
+        await api.archiveGoal(goalId);
+        if (statusEl) statusEl.textContent = 'Goal archived.';
+        await loadGoals();
+    } catch (error) {
+        console.error('Failed to archive goal:', error);
+        if (statusEl) statusEl.textContent = `Archive failed: ${error.message}`;
     }
 }
 
