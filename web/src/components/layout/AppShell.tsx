@@ -25,6 +25,7 @@ export function AppShell() {
           <h1 className="app-shell__brand">BudgetApp React workspace</h1>
           <p className="app-shell__summary">
             Shared app shell, auth, API access, and design primitives for the
+            incremental frontend migration, with dashboard and transactions now
             incremental frontend migration, with transactions and settings now
             running on the React stack.
           </p>
@@ -45,11 +46,12 @@ export function AppShell() {
         </nav>
 
         <Card
+          description="Settings still uses the legacy HTML route. Legacy dashboard and transactions remain available on explicit comparison paths while the React migrations settle."
           description="Dashboard still uses the legacy HTML route. Legacy transactions and legacy settings remain available on comparison paths while React replacements are live."
           title="Incremental cutover"
         >
           <div className="stack">
-            <a className="text-link" href="/dashboard">
+            <a className="text-link" href="/legacy/dashboard">
               Open legacy dashboard
             </a>
             <a className="text-link" href="/legacy/settings">

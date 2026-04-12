@@ -26,6 +26,22 @@ def test_transactions_route_redirects_to_react_app():
     assert response.headers["location"] == "/app/transactions"
 
 
+def test_dashboard_route_redirects_to_react_app():
+    with TestClient(app) as client:
+        response = client.get("/dashboard", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/app/dashboard"
+
+
+def test_legacy_dashboard_route_remains_available():
+    with TestClient(app) as client:
+        response = client.get("/legacy/dashboard")
+
+    assert response.status_code == 200
+    assert "Dashboard - Budget Tracker" in response.text
+
+
 def test_legacy_transactions_route_remains_available():
     with TestClient(app) as client:
         response = client.get("/legacy/transactions")
