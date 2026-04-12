@@ -154,8 +154,13 @@ async def root():             return FileResponse(FRONTEND_DIR / "index.html")
 @app.api_route("/dashboard",    methods=["GET", "HEAD"], include_in_schema=False)
 async def dashboard():        return FileResponse(FRONTEND_DIR / "dashboard.html")
 
-@app.api_route("/settings",     methods=["GET", "HEAD"], include_in_schema=False)
-async def settings_page():    return FileResponse(FRONTEND_DIR / "settings.html")
+@app.api_route("/legacy/settings", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_settings_page():
+    return FileResponse(FRONTEND_DIR / "settings.html")
+
+@app.api_route("/settings", methods=["GET", "HEAD"], include_in_schema=False)
+async def settings_page():
+    return RedirectResponse(url="/app/settings", status_code=307)
 
 @app.api_route("/legacy/transactions", methods=["GET", "HEAD"], include_in_schema=False)
 async def legacy_transactions_page():
