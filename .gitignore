@@ -11,6 +11,8 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+node_modules/
+web/dist/
 downloads/
 eggs/
 .eggs/
@@ -158,6 +160,7 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+*.tsbuildinfo
 
 # Pyre type checker
 .pyre/

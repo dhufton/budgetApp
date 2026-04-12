@@ -1,0 +1,54 @@
+:root {
+  color-scheme: light;
+
+  --font-sans: "Manrope", "Avenir Next", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", monospace;
+
+  --color-bg: #edf2f4;
+  --color-bg-elevated: #f7fafb;
+  --color-surface: #ffffff;
+  --color-surface-strong: #f2f6f7;
+  --color-surface-muted: #e6ecef;
+  --color-border: #d3dce2;
+  --color-border-strong: #b8c4cd;
+  --color-text: #15212a;
+  --color-text-muted: #5f6e79;
+  --color-accent: #17695d;
+  --color-accent-strong: #0f544a;
+  --color-accent-soft: #d7ece7;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-success: #0f766e;
+  --color-success-soft: #dbf3f0;
+  --color-shadow: 0 18px 48px rgba(24, 42, 57, 0.08);
+  --color-shadow-soft: 0 8px 24px rgba(24, 42, 57, 0.06);
+
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-pill: 999px;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;
+  --text-2xl: clamp(2rem, 4vw, 3rem);
+
+  --container-width: 74rem;
+  --sidebar-width: 18rem;
+
+  --breakpoint-sm: 36rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 75rem;
+}
