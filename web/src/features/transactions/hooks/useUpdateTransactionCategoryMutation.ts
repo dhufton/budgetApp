@@ -12,7 +12,13 @@ type MutationContext = {
   previousEntries: Array<[readonly unknown[], TransactionsResponse | undefined]>;
 };
 
-export function useUpdateTransactionCategoryMutation() {
+type UseUpdateTransactionCategoryMutationOptions = {
+  additionalInvalidationKeys?: ReadonlyArray<readonly unknown[]>;
+};
+
+export function useUpdateTransactionCategoryMutation(
+  options: UseUpdateTransactionCategoryMutationOptions = {},
+) {
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -48,6 +54,13 @@ export function useUpdateTransactionCategoryMutation() {
       context?.previousEntries.forEach(([queryKey, previousData]) => {
         queryClient.setQueryData(queryKey, previousData);
       });
+    },
+    onSuccess: async () => {
+      await Promise.all(
+        (options.additionalInvalidationKeys ?? []).map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
+      );
     },
     onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ["transactions"] });
