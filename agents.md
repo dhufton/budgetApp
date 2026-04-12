@@ -20,7 +20,11 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 - `api/routes/upload.py`: Statement upload flow (parse -> classify -> persist).
 - `api/routes/transactions.py`: Transaction list + category update.
 - `api/routes/categories.py`: Category CRUD + keyword upsert + keyword classification helper.
+- `api/routes/categorisation.py`: Suggest/approve/reject/override category workflow and review queue.
 - `api/routes/budget.py`: Budget targets/comparison/health/trend endpoints.
+- `api/routes/reviews.py`: Account-scoped monthly/upload review generation and history endpoints.
+- `api/routes/recurring.py`: Recurring transaction rule CRUD, recompute, and upcoming endpoints.
+- `api/review_service.py`: Shared review generation logic used by review/upload flows.
 - `frontend/*.html`: Page templates served by FastAPI.
 - `frontend/js/constants.js`: Shared endpoint URLs + default category constants.
 - `frontend/js/api.js`: Authenticated API client used by page scripts.
@@ -34,6 +38,7 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 - `src/ingestion/learning.py`: Learned categorisation rule helpers.
 - `supabase/schema_contract.sql`: Canonical schema contract.
 - `docs/supabase-schema-contract.md`: Human-readable schema contract.
+- `docs/openapi/openapi.json`: Committed OpenAPI snapshot kept in sync with routes/models.
 - `tests/`: Route and transfer-rule unit tests.
 
 ## Critical Contracts (Do Not Drift)
@@ -55,6 +60,9 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 4. Categorisation order of operations:
 - deterministic keywords/user keywords/transfer rules before Groq fallback
 
+5. API contract sync:
+- Route/request-model changes must regenerate and commit `docs/openapi/openapi.json`
+
 ## Safe Change Workflow
 
 1. Read impacted API route(s), corresponding frontend script(s), and schema contract first.
@@ -73,6 +81,16 @@ pip install -r requirements-dev.txt
 Run tests:
 ```bash
 pytest -q
+```
+
+Run targeted schema sync check:
+```bash
+pytest -q tests/test_openapi_schema_sync.py
+```
+
+Regenerate committed OpenAPI schema after endpoint/model changes:
+```bash
+./.venv/bin/python scripts/export_openapi.py
 ```
 
 Run app:
