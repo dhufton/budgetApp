@@ -56,9 +56,14 @@ app.add_middleware(
 app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
 app.mount("/js",  StaticFiles(directory=str(FRONTEND_DIR / "js")),  name="js")
 app.mount(
+    "/assets",
+    StaticFiles(directory=str(WEB_DIST_ASSETS_DIR), check_dir=False),
+    name="react-assets-root",
+)
+app.mount(
     "/app/assets",
     StaticFiles(directory=str(WEB_DIST_ASSETS_DIR), check_dir=False),
-    name="react-assets",
+    name="react-assets-compat",
 )
 
 app.include_router(upload.router,       prefix="/api", tags=["upload"])
@@ -148,37 +153,7 @@ async def get_config():
     }
 
 
-@app.api_route("/",             methods=["GET", "HEAD"], include_in_schema=False)
-async def root():             return FileResponse(FRONTEND_DIR / "index.html")
-
-@app.api_route("/legacy/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_dashboard_page():
-    return FileResponse(FRONTEND_DIR / "dashboard.html")
-
-@app.api_route("/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
-async def dashboard():
-    return RedirectResponse(url="/app/dashboard", status_code=307)
-
-@app.api_route("/legacy/settings", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_settings_page():
-    return FileResponse(FRONTEND_DIR / "settings.html")
-
-@app.api_route("/settings", methods=["GET", "HEAD"], include_in_schema=False)
-async def settings_page():
-    return RedirectResponse(url="/app/settings", status_code=307)
-
-@app.api_route("/legacy/transactions", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_transactions_page():
-    return FileResponse(FRONTEND_DIR / "transactions.html")
-
-@app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
-async def transactions_page():
-    return RedirectResponse(url="/app/transactions", status_code=307)
-
-
-@app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
-@app.api_route("/app/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
-async def react_app(full_path: str = ""):
+def _react_index_response():
     if not WEB_DIST_INDEX.exists():
         return JSONResponse(
             status_code=503,
@@ -188,6 +163,60 @@ async def react_app(full_path: str = ""):
         )
 
     return FileResponse(WEB_DIST_INDEX)
+
+
+def _compat_redirect_target(full_path: str, request: Request) -> str:
+    normalized_path = f"/{full_path.lstrip('/')}" if full_path else "/"
+    query = request.url.query
+    return f"{normalized_path}?{query}" if query else normalized_path
+
+
+@app.api_route("/legacy", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_root_redirect():
+    return RedirectResponse(url="/legacy/login", status_code=307)
+
+
+@app.api_route("/legacy/login", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_login_page():
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+async def root():
+    return _react_index_response()
+
+@app.api_route("/legacy/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_dashboard_page():
+    return FileResponse(FRONTEND_DIR / "dashboard.html")
+
+@app.api_route("/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
+async def dashboard():
+    return _react_index_response()
+
+@app.api_route("/legacy/settings", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_settings_page():
+    return FileResponse(FRONTEND_DIR / "settings.html")
+
+@app.api_route("/settings", methods=["GET", "HEAD"], include_in_schema=False)
+async def settings_page():
+    return _react_index_response()
+
+@app.api_route("/legacy/transactions", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_transactions_page():
+    return FileResponse(FRONTEND_DIR / "transactions.html")
+
+@app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
+async def transactions_page():
+    return _react_index_response()
+
+
+@app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/app/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def react_app_compat_redirect(request: Request, full_path: str = ""):
+    return RedirectResponse(
+        url=_compat_redirect_target(full_path, request),
+        status_code=307,
+    )
 
 
 @app.get("/api/insights")

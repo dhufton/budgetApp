@@ -22,12 +22,11 @@ export function AppShell() {
       <aside className="app-shell__sidebar">
         <div className="app-shell__brand-block">
           <span className="app-shell__eyebrow">BudgetApp</span>
-          <h1 className="app-shell__brand">BudgetApp React workspace</h1>
+          <h1 className="app-shell__brand">BudgetApp</h1>
           <p className="app-shell__summary">
-            Shared app shell, auth, API access, and design primitives for the
-            incremental frontend migration, with dashboard and transactions now
-            incremental frontend migration, with transactions and settings now
-            running on the React stack.
+            Dashboard, transactions, and settings now share one React
+            application shell while the legacy pages remain available under
+            explicit fallback routes.
           </p>
         </div>
 
@@ -46,9 +45,8 @@ export function AppShell() {
         </nav>
 
         <Card
-          description="Settings still uses the legacy HTML route. Legacy dashboard and transactions remain available on explicit comparison paths while the React migrations settle."
-          description="Dashboard still uses the legacy HTML route. Legacy transactions and legacy settings remain available on comparison paths while React replacements are live."
-          title="Incremental cutover"
+          description="Legacy HTML pages remain available for verification and rollback while the final cleanup branch is still pending."
+          title="Legacy fallbacks"
         >
           <div className="stack">
             <a className="text-link" href="/legacy/dashboard">
@@ -59,6 +57,9 @@ export function AppShell() {
             </a>
             <a className="text-link" href="/legacy/transactions">
               Open legacy transactions
+            </a>
+            <a className="text-link" href="/legacy/login">
+              Open legacy sign-in
             </a>
           </div>
         </Card>

@@ -7,8 +7,6 @@ import { DashboardPage } from "@/features/dashboard/pages/DashboardPage";
 import { SettingsPage } from "@/features/settings/pages/SettingsPage";
 import { TransactionsPage } from "@/features/transactions/pages/TransactionsPage";
 
-const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 export const router = createBrowserRouter(
   [
     {
@@ -42,5 +40,4 @@ export const router = createBrowserRouter(
       element: <Navigate replace to="/dashboard" />,
     },
   ],
-  { basename },
 );

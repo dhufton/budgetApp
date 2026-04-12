@@ -9,7 +9,7 @@ import { TransactionsEmptyState } from "@/features/transactions/components/Trans
 import { TransactionsFilters } from "@/features/transactions/components/TransactionsFilters";
 import { TransactionsLoadingState } from "@/features/transactions/components/TransactionsLoadingState";
 import { TransactionsTable } from "@/features/transactions/components/TransactionsTable";
-import { useCategoriesQuery } from "@/features/transactions/hooks/useCategoriesQuery";
+import { useCategoriesQuery } from "@/features/categories/hooks/useCategoriesQuery";
 import { useTransactionsQuery } from "@/features/transactions/hooks/useTransactionsQuery";
 import { useUpdateTransactionCategoryMutation } from "@/features/transactions/hooks/useUpdateTransactionCategoryMutation";
 import {
@@ -80,7 +80,7 @@ export function TransactionsPage() {
       }}
       variant="secondary"
     >
-      Open legacy page
+      Open legacy transactions
     </Button>
   );
 
@@ -109,8 +109,8 @@ export function TransactionsPage() {
     <div className="transactions-page">
       <PageHeader
         actions={pageActions}
-        description="The React transactions page now uses the shared shell, authenticated API client, and TanStack Query foundation while preserving the existing FastAPI contracts."
-        eyebrow="Migration pilot"
+        description="Review, filter, and recategorize account-scoped transactions inside the shared workspace while preserving the existing FastAPI contracts."
+        eyebrow="Activity"
         title="Transactions"
       />
 

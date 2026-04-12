@@ -86,26 +86,26 @@ export function AuthPage() {
   return (
     <div className="auth-page">
       <section className="auth-page__hero">
-        <span className="auth-page__eyebrow">Incremental frontend migration</span>
-        <h1 className="auth-page__title">BudgetApp now has a React landing zone.</h1>
+        <span className="auth-page__eyebrow">BudgetApp</span>
+        <h1 className="auth-page__title">Sign in to your budgeting workspace.</h1>
         <p className="auth-page__description">
-          This preview keeps the legacy pages as the production source while the
-          shared shell, auth, API client, and UI system move into a durable React
-          foundation.
+          The React app is now the primary interface for dashboard, settings,
+          and transactions while FastAPI remains the source of truth for data
+          and authentication configuration.
         </p>
         <div className="auth-page__highlights">
           <div>
-            <strong>Same backend contract</strong>
-            <p>FastAPI remains the API source of truth with the existing bearer token flow.</p>
+            <strong>Same auth model</strong>
+            <p>Supabase browser auth and bearer-token FastAPI requests remain unchanged.</p>
           </div>
           <div>
-            <strong>Safe route strategy</strong>
-            <p>The React app lives under <code>/app</code> until feature pages are migrated.</p>
+            <strong>Legacy fallback stays live</strong>
+            <p>Legacy HTML pages remain available under <code>/legacy/*</code> until the cleanup branch removes them.</p>
           </div>
         </div>
       </section>
 
-      <Card className="auth-card" title="Access the React preview">
+      <Card className="auth-card" title="Access your account">
         <Tabs
           ariaLabel="Authentication mode"
           items={AUTH_TABS}
@@ -149,6 +149,10 @@ export function AuthPage() {
           <Button disabled={isAuthenticating || isNavigating} fullWidth type="submit">
             {submitLabel}
           </Button>
+
+          <a className="text-link" href="/legacy/login">
+            Use the legacy sign-in page instead
+          </a>
         </form>
       </Card>
     </div>

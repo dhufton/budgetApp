@@ -31,7 +31,7 @@ import {
   getDashboardMetrics,
   getDefaultUploadAccountId,
 } from "@/features/dashboard/utils";
-import { useCategoriesQuery } from "@/features/transactions/hooks/useCategoriesQuery";
+import { useCategoriesQuery } from "@/features/categories/hooks/useCategoriesQuery";
 import { useTransactionsQuery } from "@/features/transactions/hooks/useTransactionsQuery";
 import { useUpdateTransactionCategoryMutation } from "@/features/transactions/hooks/useUpdateTransactionCategoryMutation";
 import "@/features/dashboard/dashboard.css";

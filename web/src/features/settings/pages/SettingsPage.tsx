@@ -26,11 +26,11 @@ export function SettingsPage() {
             }}
             variant="secondary"
           >
-            Open legacy page
+            Open legacy settings
           </Button>
         }
-        description="Settings now runs on the shared React shell while keeping the existing FastAPI payloads and auth model intact. Accounts, categories, recurring rules, budgets, and goals still use the current backend contracts."
-        eyebrow="React migration"
+        description="Manage accounts, categories, recurring rules, budgets, and goals with the existing FastAPI payloads and the shared workspace layout."
+        eyebrow="Management"
         title="Settings"
       />
 

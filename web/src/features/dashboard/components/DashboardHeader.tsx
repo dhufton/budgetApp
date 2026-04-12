@@ -27,8 +27,8 @@ export function DashboardHeader({
             Open legacy dashboard
           </Button>
         }
-        description="Dashboard analytics, uploads, recurring insights, review workflows, and category editing now run inside the shared React shell while keeping the existing FastAPI contracts untouched."
-        eyebrow="React migration"
+        description="Uploads, analytics, review workflows, recurring insights, and inline category editing all use the existing FastAPI endpoints inside the shared workspace."
+        eyebrow="Overview"
         title="Dashboard"
       />
 
