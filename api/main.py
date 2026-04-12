@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from api.routes import transactions, upload, categories, budget, accounts, reviews, categorisation, recurring
 from api.dependencies import get_supabase, get_groq_service
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -157,8 +157,13 @@ async def dashboard():        return FileResponse(FRONTEND_DIR / "dashboard.html
 @app.api_route("/settings",     methods=["GET", "HEAD"], include_in_schema=False)
 async def settings_page():    return FileResponse(FRONTEND_DIR / "settings.html")
 
+@app.api_route("/legacy/transactions", methods=["GET", "HEAD"], include_in_schema=False)
+async def legacy_transactions_page():
+    return FileResponse(FRONTEND_DIR / "transactions.html")
+
 @app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
-async def transactions_page(): return FileResponse(FRONTEND_DIR / "transactions.html")
+async def transactions_page():
+    return RedirectResponse(url="/app/transactions", status_code=307)
 
 
 @app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
