@@ -98,10 +98,6 @@ export function AuthPage() {
             <strong>Same auth model</strong>
             <p>Supabase browser auth and bearer-token FastAPI requests remain unchanged.</p>
           </div>
-          <div>
-            <strong>Legacy fallback stays live</strong>
-            <p>Legacy HTML pages remain available under <code>/legacy/*</code> until the cleanup branch removes them.</p>
-          </div>
         </div>
       </section>
 
@@ -149,10 +145,6 @@ export function AuthPage() {
           <Button disabled={isAuthenticating || isNavigating} fullWidth type="submit">
             {submitLabel}
           </Button>
-
-          <a className="text-link" href="/legacy/login">
-            Use the legacy sign-in page instead
-          </a>
         </form>
       </Card>
     </div>

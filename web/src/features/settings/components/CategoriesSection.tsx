@@ -313,7 +313,7 @@ export function CategoriesSection() {
       ) : null}
 
       <Card
-        description="Custom categories stay deletable and use the same keyword-save contract as the legacy settings page."
+        description="Custom categories stay deletable and use the same keyword-save contract as the existing categories API."
         title="Custom categories"
       >
         {customCategories.length ? (

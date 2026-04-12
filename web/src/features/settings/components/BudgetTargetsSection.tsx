@@ -328,7 +328,7 @@ export function BudgetTargetsSection() {
             </Button>
           </div>
         }
-        description="AI suggestions stay optional and continue to write through the same budget target POST route used by the legacy settings page."
+        description="AI suggestions stay optional and continue to write through the existing budget target POST route."
         title="Suggested targets"
       >
         {Object.keys(suggestions).length ? (

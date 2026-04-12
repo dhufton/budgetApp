@@ -1,6 +1,5 @@
 import { useState } from "react";
 
-import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AccountsSection } from "@/features/settings/components/AccountsSection";
 import { BudgetTargetsSection } from "@/features/settings/components/BudgetTargetsSection";
@@ -19,16 +18,6 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <PageHeader
-        actions={
-          <Button
-            onClick={() => {
-              window.location.assign("/legacy/settings");
-            }}
-            variant="secondary"
-          >
-            Open legacy settings
-          </Button>
-        }
         description="Manage accounts, categories, recurring rules, budgets, and goals with the existing FastAPI payloads and the shared workspace layout."
         eyebrow="Management"
         title="Settings"

@@ -81,7 +81,10 @@ class MockSupabase:
             SimpleNamespace(data=[]),
             SimpleNamespace(data=[{"id": "user-1"}]),
         ])
-        self.statements = Query([SimpleNamespace(data=[{"id": "stmt-1"}])])
+        self.statements = Query([
+            SimpleNamespace(data=[]),
+            SimpleNamespace(data=[{"id": "stmt-1"}]),
+        ])
         self.transactions = Query([SimpleNamespace(data=[{
             "id": "txn-1",
             "category": "Food",
@@ -108,7 +111,11 @@ def test_upload_creates_snapshot_review(monkeypatch):
     mock_supabase = MockSupabase()
     monkeypatch.setattr(upload_route, "supabase_admin", mock_supabase)
     monkeypatch.setattr(upload_route, "AmexCSVParser", DummyParser)
-    monkeypatch.setattr(upload_route, "save_uploaded_file", lambda file_obj, user_id: f"{user_id}/statement.csv")
+    monkeypatch.setattr(
+        upload_route,
+        "save_uploaded_file",
+        lambda file_obj, user_id, storage_path_override=None: storage_path_override or f"{user_id}/statement.csv",
+    )
     monkeypatch.setattr(upload_route, "get_all_statement_paths", lambda user_id: [])
     monkeypatch.setattr(upload_route, "apply_user_keywords", lambda txns, user_id: txns)
     monkeypatch.setattr(upload_route, "apply_transfer_classification", lambda txns: txns)

@@ -73,17 +73,6 @@ export function TransactionsPage() {
     });
   }
 
-  const pageActions = (
-    <Button
-      onClick={() => {
-        window.location.assign("/legacy/transactions");
-      }}
-      variant="secondary"
-    >
-      Open legacy transactions
-    </Button>
-  );
-
   const content = renderContent({
     categoriesAvailable: !categoryEditingDisabled,
     categoryOptions,
@@ -108,7 +97,6 @@ export function TransactionsPage() {
   return (
     <div className="transactions-page">
       <PageHeader
-        actions={pageActions}
         description="Review, filter, and recategorize account-scoped transactions inside the shared workspace while preserving the existing FastAPI contracts."
         eyebrow="Activity"
         title="Transactions"

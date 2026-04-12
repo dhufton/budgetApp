@@ -30,7 +30,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 APP_START_TIME = datetime.utcnow()
 BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = BASE_DIR / "frontend"
 WEB_DIST_DIR = BASE_DIR / "web" / "dist"
 WEB_DIST_INDEX = WEB_DIST_DIR / "index.html"
 WEB_DIST_ASSETS_DIR = WEB_DIST_DIR / "assets"
@@ -53,8 +52,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
-app.mount("/js",  StaticFiles(directory=str(FRONTEND_DIR / "js")),  name="js")
 app.mount(
     "/assets",
     StaticFiles(directory=str(WEB_DIST_ASSETS_DIR), check_dir=False),
@@ -171,39 +168,17 @@ def _compat_redirect_target(full_path: str, request: Request) -> str:
     return f"{normalized_path}?{query}" if query else normalized_path
 
 
-@app.api_route("/legacy", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_root_redirect():
-    return RedirectResponse(url="/legacy/login", status_code=307)
-
-
-@app.api_route("/legacy/login", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_login_page():
-    return FileResponse(FRONTEND_DIR / "index.html")
-
-
 @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
 async def root():
     return _react_index_response()
-
-@app.api_route("/legacy/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_dashboard_page():
-    return FileResponse(FRONTEND_DIR / "dashboard.html")
 
 @app.api_route("/dashboard", methods=["GET", "HEAD"], include_in_schema=False)
 async def dashboard():
     return _react_index_response()
 
-@app.api_route("/legacy/settings", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_settings_page():
-    return FileResponse(FRONTEND_DIR / "settings.html")
-
 @app.api_route("/settings", methods=["GET", "HEAD"], include_in_schema=False)
 async def settings_page():
     return _react_index_response()
-
-@app.api_route("/legacy/transactions", methods=["GET", "HEAD"], include_in_schema=False)
-async def legacy_transactions_page():
-    return FileResponse(FRONTEND_DIR / "transactions.html")
 
 @app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
 async def transactions_page():

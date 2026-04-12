@@ -30,7 +30,7 @@ export function UploadPanel({
 
   const helperText = useMemo(() => {
     if (!selectedFiles.length) {
-      return "Upload PDF or CSV bank statements. Successful uploads automatically trigger categorisation and recurring-rule recomputation, matching the legacy dashboard flow.";
+      return "Upload PDF or CSV bank statements. Successful uploads automatically trigger categorisation and recurring-rule recomputation through the React workflow.";
     }
 
     return `${selectedFiles.length} file${

@@ -63,46 +63,6 @@ def test_settings_route_serves_react_app():
     assert_react_shell_response(response)
 
 
-def test_legacy_login_route_remains_available():
-    with TestClient(app) as client:
-        response = client.get("/legacy/login")
-
-    assert response.status_code == 200
-    assert "Budget Tracker - Login" in response.text
-
-
-def test_legacy_dashboard_route_remains_available():
-    with TestClient(app) as client:
-        response = client.get("/legacy/dashboard")
-
-    assert response.status_code == 200
-    assert "Dashboard - Budget Tracker" in response.text
-
-
-def test_legacy_transactions_route_remains_available():
-    with TestClient(app) as client:
-        response = client.get("/legacy/transactions")
-
-    assert response.status_code == 200
-    assert "Transactions - Budget Tracker" in response.text
-
-
-def test_legacy_settings_route_remains_available():
-    with TestClient(app) as client:
-        response = client.get("/legacy/settings")
-
-    assert response.status_code == 200
-    assert "Settings - Budget Tracker" in response.text
-
-
-def test_legacy_root_redirects_to_legacy_login():
-    with TestClient(app) as client:
-        response = client.get("/legacy", follow_redirects=False)
-
-    assert response.status_code == 307
-    assert response.headers["location"] == "/legacy/login"
-
-
 def test_app_dashboard_redirects_to_primary_dashboard_route():
     with TestClient(app) as client:
         response = client.get("/app/dashboard", follow_redirects=False)
@@ -117,3 +77,12 @@ def test_app_root_redirects_to_primary_root_route():
 
     assert response.status_code == 307
     assert response.headers["location"] == "/"
+
+
+def test_legacy_routes_are_not_available():
+    with TestClient(app) as client:
+        assert client.get("/legacy", follow_redirects=False).status_code == 404
+        assert client.get("/legacy/login", follow_redirects=False).status_code == 404
+        assert client.get("/legacy/dashboard", follow_redirects=False).status_code == 404
+        assert client.get("/legacy/settings", follow_redirects=False).status_code == 404
+        assert client.get("/legacy/transactions", follow_redirects=False).status_code == 404

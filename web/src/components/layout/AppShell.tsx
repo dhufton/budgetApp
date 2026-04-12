@@ -1,7 +1,6 @@
 import { NavLink, Outlet } from "react-router-dom";
 
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { useAccountsQuery } from "@/features/accounts/hooks/useAccountsQuery";
@@ -25,8 +24,8 @@ export function AppShell() {
           <h1 className="app-shell__brand">BudgetApp</h1>
           <p className="app-shell__summary">
             Dashboard, transactions, and settings now share one React
-            application shell while the legacy pages remain available under
-            explicit fallback routes.
+            application shell with FastAPI continuing to serve the API and
+            authentication configuration.
           </p>
         </div>
 
@@ -43,26 +42,6 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
-
-        <Card
-          description="Legacy HTML pages remain available for verification and rollback while the final cleanup branch is still pending."
-          title="Legacy fallbacks"
-        >
-          <div className="stack">
-            <a className="text-link" href="/legacy/dashboard">
-              Open legacy dashboard
-            </a>
-            <a className="text-link" href="/legacy/settings">
-              Open legacy settings
-            </a>
-            <a className="text-link" href="/legacy/transactions">
-              Open legacy transactions
-            </a>
-            <a className="text-link" href="/legacy/login">
-              Open legacy sign-in
-            </a>
-          </div>
-        </Card>
       </aside>
 
       <div className="app-shell__content">

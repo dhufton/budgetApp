@@ -64,11 +64,12 @@ def test_recompute_recurring_creates_rule(monkeypatch):
         ],
     )
 
+    default_account_q = _mock_query(data=[{"id": "acc-1", "is_default": True}])
     existing_q = _mock_query(data=[])
     upsert_q = _mock_query(data=[])
 
     mock_supabase = MagicMock()
-    mock_supabase.table.side_effect = [existing_q, upsert_q]
+    mock_supabase.table.side_effect = [default_account_q, existing_q, upsert_q]
 
     client = _client(mock_supabase)
     res = client.post("/api/recurring/recompute", json={"lookback_months": 12, "min_occurrences": 3, "account_id": "all"})

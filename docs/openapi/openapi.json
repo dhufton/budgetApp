@@ -151,7 +151,6 @@
       "CategoryCreate": {
         "properties": {
           "keywords": {
-            "default": [],
             "items": {
               "type": "string"
             },
@@ -369,6 +368,17 @@
           "final_category"
         ],
         "title": "OverrideRequest",
+        "type": "object"
+      },
+      "RecategoriseAllRequest": {
+        "properties": {
+          "account_id": {
+            "default": "all",
+            "title": "Account Id",
+            "type": "string"
+          }
+        },
+        "title": "RecategoriseAllRequest",
         "type": "object"
       },
       "RecomputeRequest": {
@@ -1440,6 +1450,63 @@
           }
         },
         "summary": "Create Category",
+        "tags": [
+          "categories"
+        ]
+      }
+    },
+    "/api/categories/recategorise-all": {
+      "post": {
+        "operationId": "recategorise_all_transactions_api_categories_recategorise_all_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecategoriseAllRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recategorise All Transactions",
         "tags": [
           "categories"
         ]

@@ -1,6 +1,6 @@
 # BudgetApp
 
-BudgetApp is a FastAPI + vanilla JavaScript personal finance tracker with:
+BudgetApp is a FastAPI + React personal finance tracker with:
 - Supabase auth and data storage
 - Multi-account support
 - Statement ingestion (PDF/CSV)
@@ -10,15 +10,15 @@ BudgetApp is a FastAPI + vanilla JavaScript personal finance tracker with:
 ## Architecture
 
 - Backend API: `api/` (FastAPI)
-- Frontend: `frontend/` (server-mounted static HTML/CSS/JS)
+- Frontend: `web/` (React + Vite, built and served by FastAPI)
 - Shared/core modules: `src/` (Supabase client, ingestion, categorisation config)
 - Database contract: `supabase/schema_contract.sql` + `docs/supabase-schema-contract.md`
 - Tests: `tests/`
 
 ### High-level flow
 
-1. User authenticates in frontend via Supabase JS client.
-2. Frontend sends bearer token to FastAPI routes.
+1. User authenticates in the React app via Supabase JS client.
+2. React sends bearer token to FastAPI routes.
 3. Backend validates token with `src/supabase_client.supabase`.
 4. Statement upload parses rows, applies deterministic rules and transfer classification, then optionally calls Groq for remaining uncategorised rows.
 5. Routes return account-aware transaction/budget analytics.
@@ -39,19 +39,15 @@ budgetApp/
       transactions.py         # list + category patch
       categories.py           # category CRUD + keyword mapping
       budget.py               # targets, comparison, health, trend
-  frontend/
-    index.html                # login/register
-    dashboard.html            # main analytics + upload + transaction table
-    settings.html             # categories, budgets, account management
-    transactions.html         # focused transaction list/edit view
-    css/styles.css
-    js/
-      constants.js            # shared endpoints/constants
-      api.js                  # authenticated API wrapper
-      auth.js                 # auth/session helpers
-      dashboard.js            # dashboard interactions/charts
-      settings.js             # settings interactions
-      transactions.js         # transaction table/filter interactions
+  web/
+    src/
+      app/                    # router, providers, shell
+      components/             # shared UI/layout primitives
+      features/               # auth, dashboard, settings, transactions
+      lib/                    # API client, auth helpers, constants
+      styles/                 # tokens and global styles
+    package.json
+    vite.config.ts
   src/
     config.py                 # built-in categories + keyword rules
     supabase_client.py        # anon/admin Supabase clients
@@ -76,6 +72,7 @@ budgetApp/
 
 ```bash
 pip install -r requirements-dev.txt
+cd web && npm ci && cd ..
 ```
 
 ### 2. Set environment variables
@@ -103,16 +100,20 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 Open: [http://localhost:8000/](http://localhost:8000/)
 
+### 4. Build the React app
+
+```bash
+cd web && npm run build && cd ..
+```
+
 ## API Surface (Current)
 
 ### Pages
 - `GET /`
 - `GET /dashboard`
-- `GET /settings` -> redirects to `/app/settings`
-- `GET /transactions` -> redirects to `/app/transactions`
-- `GET /legacy/settings`
-- `GET /legacy/transactions`
-- `GET /app/*`
+- `GET /settings`
+- `GET /transactions`
+- `GET /app/*` -> compatibility redirect to primary React routes
 
 ### Core
 - `GET /api/config`

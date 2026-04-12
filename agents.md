@@ -4,7 +4,7 @@ This file is for coding agents working in this repository.
 
 ## Objective
 
-Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
+Maintain and extend BudgetApp (FastAPI + React) without breaking:
 - Supabase schema contract
 - account-aware transaction flows
 - deterministic + AI-assisted categorisation pipeline
@@ -25,12 +25,15 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 - `api/routes/reviews.py`: Account-scoped monthly/upload review generation and history endpoints.
 - `api/routes/recurring.py`: Recurring transaction rule CRUD, recompute, and upcoming endpoints.
 - `api/review_service.py`: Shared review generation logic used by review/upload flows.
-- `frontend/*.html`: Page templates served by FastAPI.
-- `frontend/js/constants.js`: Shared endpoint URLs + default category constants.
-- `frontend/js/api.js`: Authenticated API client used by page scripts.
-- `frontend/js/dashboard.js`: Upload/dashboard analytics UI logic.
-- `frontend/js/settings.js`: Accounts, categories, budgets settings logic.
-- `frontend/js/transactions.js`: Transaction list/filter/edit UI logic.
+- `web/src/app/*`: React app shell, router, and global providers.
+- `web/src/components/*`: Shared React layout and UI primitives.
+- `web/src/features/auth/*`: Auth page, provider, and protected-route behavior.
+- `web/src/features/dashboard/*`: Dashboard React feature modules.
+- `web/src/features/settings/*`: Settings React feature modules.
+- `web/src/features/transactions/*`: Transactions React feature modules.
+- `web/src/lib/api/*`: Typed API client/endpoints/types used by React features.
+- `web/src/lib/constants/categories.ts`: Frontend category constants.
+- `web/src/styles/*`: Global design tokens and base styles.
 - `src/config.py`: Built-in categories + deterministic keyword rules.
 - `src/supabase_client.py`: Global Supabase anon/admin clients.
 - `src/ingestion/parser.py`: Chase PDF and Amex CSV parsing.
@@ -45,7 +48,7 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 
 1. Built-in categories must remain aligned across:
 - `src/config.py`
-- `frontend/js/constants.js`
+- `web/src/lib/constants/categories.ts`
 - `docs/supabase-schema-contract.md`
 
 2. Schema changes must be paired:
@@ -65,7 +68,7 @@ Maintain and extend BudgetApp (FastAPI + vanilla JS) without breaking:
 
 ## Safe Change Workflow
 
-1. Read impacted API route(s), corresponding frontend script(s), and schema contract first.
+1. Read impacted API route(s), corresponding React feature(s)/shared component(s), and schema contract first.
 2. Prefer minimal, local edits over broad refactors.
 3. Keep request/response shapes backward-compatible unless intentionally versioned.
 4. Update tests (or add targeted tests) when behavior changes.
@@ -100,9 +103,9 @@ uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Common Pitfalls
 
-- Editing only backend category constants and forgetting frontend defaults.
+- Editing only backend category constants and forgetting React frontend defaults.
 - Introducing schema field renames without updating docs/routes/UI.
-- Breaking auth flow by bypassing `Authorization: Bearer <token>` usage in frontend API calls.
+- Breaking auth flow by bypassing the shared React auth/API client.
 - Reordering classification steps so transfer detection or user keywords no longer run before Groq.
 
 ## Out of Scope for Routine Changes

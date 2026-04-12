@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import type { Account } from "@/lib/api/types";
@@ -17,16 +16,6 @@ export function DashboardHeader({
   return (
     <div className="dashboard-header">
       <PageHeader
-        actions={
-          <Button
-            onClick={() => {
-              window.location.assign("/legacy/dashboard");
-            }}
-            variant="secondary"
-          >
-            Open legacy dashboard
-          </Button>
-        }
         description="Uploads, analytics, review workflows, recurring insights, and inline category editing all use the existing FastAPI endpoints inside the shared workspace."
         eyebrow="Overview"
         title="Dashboard"
