@@ -1,0 +1,192 @@
+.transactions-page {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.transactions-page__notice {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(180, 35, 24, 0.18);
+  background: rgba(253, 236, 234, 0.7);
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+}
+
+.transactions-filters {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.transactions-filters__controls {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.transactions-filters__tabs {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.transactions-filters__summary {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.transactions-table {
+  display: none;
+}
+
+.transactions-table table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: collapse;
+}
+
+.transactions-table th,
+.transactions-table td {
+  padding: 0.95rem 1rem;
+  border-bottom: 1px solid rgba(21, 33, 42, 0.08);
+  vertical-align: top;
+}
+
+.transactions-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: rgba(247, 250, 251, 0.96);
+  text-align: left;
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.transactions-table__row--uncategorized {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.transactions-table__description-cell {
+  min-width: 18rem;
+  line-height: 1.6;
+}
+
+.transactions-table__category-cell {
+  min-width: 14rem;
+}
+
+.transactions-table__amount-column,
+.transactions-table__amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.transactions-table__amount {
+  font-weight: 700;
+}
+
+.transactions-table__amount--positive {
+  color: var(--color-success);
+}
+
+.transactions-table__amount--negative {
+  color: var(--color-danger);
+}
+
+.transaction-category-select {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.transaction-category-select__control {
+  min-width: 12rem;
+}
+
+.transaction-category-select__control--uncategorized {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: rgba(255, 251, 235, 0.95);
+}
+
+.transaction-category-select__control--pending {
+  opacity: 0.75;
+}
+
+.transaction-category-select__status {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.transactions-mobile-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.transactions-mobile-card {
+  border: 1px solid rgba(21, 33, 42, 0.08);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--color-shadow-soft);
+}
+
+.transactions-mobile-card--uncategorized {
+  border-color: rgba(217, 119, 6, 0.28);
+  background: rgba(255, 251, 235, 0.95);
+}
+
+.transactions-mobile-card__header,
+.transactions-mobile-card__body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.transactions-mobile-card__header {
+  align-items: start;
+}
+
+.transactions-mobile-card__label {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.transactions-mobile-card__value,
+.transactions-mobile-card__description {
+  margin: 0;
+}
+
+.transactions-mobile-card__description {
+  line-height: 1.6;
+}
+
+.transactions-mobile-card__amount {
+  font-size: var(--text-lg);
+  font-weight: 700;
+}
+
+@media (min-width: 48rem) {
+  .transactions-filters__controls {
+    grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+    align-items: end;
+  }
+
+  .transactions-table {
+    display: block;
+    overflow-x: auto;
+    border: 1px solid rgba(21, 33, 42, 0.08);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .transactions-mobile-list {
+    display: none;
+  }
+
+  .transactions-mobile-card__header,
+  .transactions-mobile-card__body {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
