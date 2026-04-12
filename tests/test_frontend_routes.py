@@ -48,3 +48,19 @@ def test_legacy_transactions_route_remains_available():
 
     assert response.status_code == 200
     assert "Transactions - Budget Tracker" in response.text
+
+
+def test_settings_route_redirects_to_react_app():
+    with TestClient(app) as client:
+        response = client.get("/settings", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/app/settings"
+
+
+def test_legacy_settings_route_remains_available():
+    with TestClient(app) as client:
+        response = client.get("/legacy/settings")
+
+    assert response.status_code == 200
+    assert "Settings - Budget Tracker" in response.text

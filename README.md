@@ -108,8 +108,11 @@ Open: [http://localhost:8000/](http://localhost:8000/)
 ### Pages
 - `GET /`
 - `GET /dashboard`
-- `GET /settings`
-- `GET /transactions`
+- `GET /settings` -> redirects to `/app/settings`
+- `GET /transactions` -> redirects to `/app/transactions`
+- `GET /legacy/settings`
+- `GET /legacy/transactions`
+- `GET /app/*`
 
 ### Core
 - `GET /api/config`
