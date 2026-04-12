@@ -2,6 +2,7 @@
 import sys
 import os
 import logging
+from pathlib import Path
 from time import perf_counter
 from uuid import uuid4
 
@@ -28,6 +29,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 APP_START_TIME = datetime.utcnow()
+BASE_DIR = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = BASE_DIR / "frontend"
+WEB_DIST_DIR = BASE_DIR / "web" / "dist"
+WEB_DIST_INDEX = WEB_DIST_DIR / "index.html"
+WEB_DIST_ASSETS_DIR = WEB_DIST_DIR / "assets"
 
 app = FastAPI(title="Budget Tracker API", version="1.0.0")
 
@@ -35,7 +41,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:5173",
         "http://localhost:8000",
+        "http://127.0.0.1:5173",
         "http://127.0.0.1:8000",
         "https://budgetapp-fusi.onrender.com",
         "https://budget-tracker-app-n12a.onrender.com",
@@ -45,8 +53,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
-app.mount("/js",  StaticFiles(directory="frontend/js"),  name="js")
+app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+app.mount("/js",  StaticFiles(directory=str(FRONTEND_DIR / "js")),  name="js")
+app.mount(
+    "/app/assets",
+    StaticFiles(directory=str(WEB_DIST_ASSETS_DIR), check_dir=False),
+    name="react-assets",
+)
 
 app.include_router(upload.router,       prefix="/api", tags=["upload"])
 app.include_router(transactions.router, prefix="/api", tags=["transactions"])
@@ -136,16 +149,30 @@ async def get_config():
 
 
 @app.api_route("/",             methods=["GET", "HEAD"], include_in_schema=False)
-async def root():             return FileResponse("frontend/index.html")
+async def root():             return FileResponse(FRONTEND_DIR / "index.html")
 
 @app.api_route("/dashboard",    methods=["GET", "HEAD"], include_in_schema=False)
-async def dashboard():        return FileResponse("frontend/dashboard.html")
+async def dashboard():        return FileResponse(FRONTEND_DIR / "dashboard.html")
 
 @app.api_route("/settings",     methods=["GET", "HEAD"], include_in_schema=False)
-async def settings_page():    return FileResponse("frontend/settings.html")
+async def settings_page():    return FileResponse(FRONTEND_DIR / "settings.html")
 
 @app.api_route("/transactions", methods=["GET", "HEAD"], include_in_schema=False)
-async def transactions_page(): return FileResponse("frontend/transactions.html")
+async def transactions_page(): return FileResponse(FRONTEND_DIR / "transactions.html")
+
+
+@app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
+@app.api_route("/app/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+async def react_app(full_path: str = ""):
+    if not WEB_DIST_INDEX.exists():
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "React app build not found. Run `npm install` and `npm run build` in `web/`."
+            },
+        )
+
+    return FileResponse(WEB_DIST_INDEX)
 
 
 @app.get("/api/insights")
