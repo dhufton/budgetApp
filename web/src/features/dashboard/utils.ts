@@ -17,6 +17,8 @@ type MultiSeriesChart = {
     id: string;
     label: string;
     color: string;
+    legendGroup?: string;
+    strokeDasharray?: string;
     values: number[];
   }>;
 };
@@ -207,6 +209,7 @@ export function getCategorySpendingSeries(
       id: category,
       label: category,
       color: DASHBOARD_CHART_COLORS[index % DASHBOARD_CHART_COLORS.length],
+      legendGroup: category,
       values: labels.map(
         (label) => monthCategoryTotals.get(label)?.get(category) ?? 0,
       ),
@@ -214,47 +217,70 @@ export function getCategorySpendingSeries(
   };
 }
 
-export function getBudgetTrendTotals(data?: BudgetTrendResponse | null): MultiSeriesChart {
+export function getBudgetTrendCategorySeries(
+  data?: BudgetTrendResponse | null,
+): MultiSeriesChart {
   if (!data) {
     return { labels: [], series: [] };
   }
 
-  const totalsByMonth = new Map<string, { actual: number; target: number }>();
+  const monthCategoryTotals = new Map<
+    string,
+    Map<string, { actual: number; target: number }>
+  >();
+  const categories = (data.categories ?? [])
+    .filter((category) => category && category !== "Transfer")
+    .sort((left, right) => left.localeCompare(right));
 
   data.months.forEach((month) => {
-    totalsByMonth.set(month, { actual: 0, target: 0 });
+    monthCategoryTotals.set(month, new Map());
   });
 
   data.series.forEach((point) => {
-    const current = totalsByMonth.get(point.month);
-    if (!current) {
+    if (!point.category || point.category === "Transfer") {
       return;
     }
 
-    current.target += Number(point.target ?? 0);
-    current.actual += Number(point.actual ?? 0);
+    const monthTotals =
+      monthCategoryTotals.get(point.month) ?? new Map<string, { actual: number; target: number }>();
+    const existing = monthTotals.get(point.category) ?? { actual: 0, target: 0 };
+    existing.actual += Number(point.actual ?? 0);
+    existing.target += Number(point.target ?? 0);
+    monthTotals.set(point.category, existing);
+    monthCategoryTotals.set(point.month, monthTotals);
   });
+
+  const categoriesWithValues = categories.filter((category) =>
+    data.months.some((month) => {
+      const totals = monthCategoryTotals.get(month)?.get(category);
+      return Boolean((totals?.actual ?? 0) || (totals?.target ?? 0));
+    }),
+  );
 
   return {
     labels: data.months,
-    series: [
-      {
-        id: "target",
-        label: "Budget target",
-        color: "#2563eb",
-        values: data.months.map((month) =>
-          Number((totalsByMonth.get(month)?.target ?? 0).toFixed(2)),
-        ),
-      },
-      {
-        id: "actual",
-        label: "Actual spend",
-        color: "#dc2626",
-        values: data.months.map((month) =>
-          Number((totalsByMonth.get(month)?.actual ?? 0).toFixed(2)),
-        ),
-      },
-    ],
+    series: categoriesWithValues.flatMap((category, index) => {
+      const color = DASHBOARD_CHART_COLORS[index % DASHBOARD_CHART_COLORS.length];
+      const values = data.months.map((month) => monthCategoryTotals.get(month)?.get(category));
+
+      return [
+        {
+          id: `${category}-actual`,
+          label: `${category} actual`,
+          color,
+          legendGroup: category,
+          values: values.map((value) => Number((value?.actual ?? 0).toFixed(2))),
+        },
+        {
+          id: `${category}-target`,
+          label: `${category} target`,
+          color,
+          legendGroup: category,
+          strokeDasharray: "5 4",
+          values: values.map((value) => Number((value?.target ?? 0).toFixed(2))),
+        },
+      ];
+    }),
   };
 }
 

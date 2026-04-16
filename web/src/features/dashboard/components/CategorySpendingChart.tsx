@@ -20,7 +20,7 @@ export function CategorySpendingChart({
 
   return (
     <Card
-      description="Category-level spend trends across recent statement months."
+      description="Click a category in the legend to hide it. Double-click a category to isolate it."
       title="Category spending chart"
     >
       {isLoading ? (

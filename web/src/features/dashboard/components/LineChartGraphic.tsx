@@ -1,9 +1,13 @@
+import { useEffect, useMemo, useState } from "react";
+
 import { formatCurrency, formatMonthLabel } from "@/features/dashboard/utils";
 
 type LineSeries = {
   color: string;
   id: string;
   label: string;
+  legendGroup?: string;
+  strokeDasharray?: string;
   values: number[];
 };
 
@@ -27,7 +31,59 @@ export function LineChartGraphic({
   labels,
   series,
 }: LineChartGraphicProps) {
-  const maxValue = Math.max(1, ...series.flatMap((item) => item.values), 1);
+  const legendGroups = useMemo(() => {
+    const groups = new Map<
+      string,
+      { color: string; id: string; label: string; seriesIds: string[]; valueLabel: string }
+    >();
+
+    series.forEach((item) => {
+      const groupId = item.legendGroup || item.id;
+      const group = groups.get(groupId);
+      const latestValue = item.values[item.values.length - 1] ?? 0;
+
+      if (group) {
+        group.seriesIds.push(item.id);
+        if (item.label.toLowerCase().includes("actual")) {
+          group.valueLabel = formatCurrency(latestValue);
+        } else if (!group.valueLabel) {
+          group.valueLabel = formatCurrency(latestValue);
+        }
+        return;
+      }
+
+      groups.set(groupId, {
+        id: groupId,
+        label: item.legendGroup || item.label,
+        color: item.color,
+        seriesIds: [item.id],
+        valueLabel: formatCurrency(latestValue),
+      });
+    });
+
+    return [...groups.values()];
+  }, [series]);
+
+  const [hiddenLegendGroups, setHiddenLegendGroups] = useState<string[]>([]);
+
+  useEffect(() => {
+    setHiddenLegendGroups((currentHidden) =>
+      currentHidden.filter((groupId) =>
+        legendGroups.some((group) => group.id === groupId),
+      ),
+    );
+  }, [legendGroups]);
+
+  const visibleSeries = useMemo(
+    () =>
+      series.filter((item) => {
+        const groupId = item.legendGroup || item.id;
+        return !hiddenLegendGroups.includes(groupId);
+      }),
+    [hiddenLegendGroups, series],
+  );
+
+  const maxValue = Math.max(1, ...visibleSeries.flatMap((item) => item.values), 1);
   const graphWidth = VIEWBOX_WIDTH - PADDING.left - PADDING.right;
   const graphHeight = VIEWBOX_HEIGHT - PADDING.top - PADDING.bottom;
 
@@ -45,6 +101,30 @@ export function LineChartGraphic({
 
   function buildPoints(values: number[]) {
     return values.map((value, index) => `${getX(index)},${getY(value)}`).join(" ");
+  }
+
+  function toggleLegendGroup(groupId: string) {
+    setHiddenLegendGroups((currentHidden) =>
+      currentHidden.includes(groupId)
+        ? currentHidden.filter((currentGroupId) => currentGroupId !== groupId)
+        : [...currentHidden, groupId],
+    );
+  }
+
+  function isolateLegendGroup(groupId: string) {
+    setHiddenLegendGroups((currentHidden) => {
+      const visibleGroupIds = legendGroups
+        .map((group) => group.id)
+        .filter((currentGroupId) => !currentHidden.includes(currentGroupId));
+
+      if (visibleGroupIds.length === 1 && visibleGroupIds[0] === groupId) {
+        return [];
+      }
+
+      return legendGroups
+        .map((group) => group.id)
+        .filter((currentGroupId) => currentGroupId !== groupId);
+    });
   }
 
   return (
@@ -69,12 +149,13 @@ export function LineChartGraphic({
           );
         })}
 
-        {series.map((item) => (
+        {visibleSeries.map((item) => (
           <g key={item.id}>
             <polyline
               className="line-chart-graphic__line"
               points={buildPoints(item.values)}
               stroke={item.color}
+              strokeDasharray={item.strokeDasharray}
             />
             {item.values.map((value, index) => (
               <circle
@@ -97,15 +178,26 @@ export function LineChartGraphic({
       </div>
 
       <ul className="line-chart-graphic__legend">
-        {series.map((item) => (
-          <li className="line-chart-graphic__legend-item" key={item.id}>
-            <span
-              aria-hidden="true"
-              className="line-chart-graphic__swatch"
-              style={{ backgroundColor: item.color }}
-            />
-            <span>{item.label}</span>
-            <strong>{formatCurrency(item.values[item.values.length - 1] ?? 0)}</strong>
+        {legendGroups.map((group) => (
+          <li className="line-chart-graphic__legend-item" key={group.id}>
+            <button
+              className={`line-chart-graphic__legend-button${
+                hiddenLegendGroups.includes(group.id)
+                  ? " line-chart-graphic__legend-button--muted"
+                  : ""
+              }`}
+              onClick={() => toggleLegendGroup(group.id)}
+              onDoubleClick={() => isolateLegendGroup(group.id)}
+              type="button"
+            >
+              <span
+                aria-hidden="true"
+                className="line-chart-graphic__swatch"
+                style={{ backgroundColor: group.color }}
+              />
+              <span>{group.label}</span>
+              <strong>{group.valueLabel}</strong>
+            </button>
           </li>
         ))}
       </ul>

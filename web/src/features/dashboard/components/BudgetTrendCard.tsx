@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { LineChartGraphic } from "@/features/dashboard/components/LineChartGraphic";
 import type { BudgetTrendResponse } from "@/features/dashboard/types";
-import { getBudgetTrendTotals } from "@/features/dashboard/utils";
+import { getBudgetTrendCategorySeries } from "@/features/dashboard/utils";
 
 type BudgetTrendCardProps = {
   data?: BudgetTrendResponse;
@@ -16,16 +16,16 @@ export function BudgetTrendCard({
   errorMessage,
   isLoading,
 }: BudgetTrendCardProps) {
-  const chart = getBudgetTrendTotals(data);
+  const chart = getBudgetTrendCategorySeries(data);
 
   return (
     <Card
-      description="Monthly target-versus-actual totals aggregated from the existing budget trend endpoint."
+      description="Click a category in the legend to hide it. Double-click a category to isolate it. Solid lines show actual spend and matching dashed lines show budget targets."
       title="Budget trend"
     >
       {isLoading ? (
         <LoadingState
-          description="Loading monthly target-versus-actual totals."
+          description="Loading monthly target-versus-actual trends by category."
           title="Loading budget trend"
         />
       ) : errorMessage ? (
@@ -35,7 +35,7 @@ export function BudgetTrendCard({
         />
       ) : !chart.labels.length || !chart.series.length ? (
         <EmptyState
-          description="Add budget targets or upload spending data to build a monthly target-versus-actual history."
+          description="Add budget targets or upload spending data to compare actual and budgeted spend by category."
           title="No budget trend data yet"
         />
       ) : (
